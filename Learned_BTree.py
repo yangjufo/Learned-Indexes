@@ -1,10 +1,12 @@
 from __future__ import print_function
 import pandas as pd
 from Trained_NN import TrainedNN, ParameterPool, Distribution, set_data_type
-import csv
+from btree import BTree
+import time
+import gc
 
 BLOCK_SIZE = 100
-TOTAL_NUMBER = 100000
+TOTAL_NUMBER = 1000000
 
 filePath = {
     Distribution.RANDOM: "data/random.csv",
@@ -52,15 +54,26 @@ def hybrid_training(stage_nums, core_nums, train_step_nums, batch_size_nums, lea
                     if p > stage_nums[i + 1] - 1:
                         p = stage_nums[i + 1] - 1
                     tmp_inputs[i + 1][p].append(tmp_inputs[i][j][ind])
-                    tmp_labels[i + 1][p].append(tmp_labels[i][j][ind])                
-                return                      
-
-
+                    tmp_labels[i + 1][p].append(tmp_labels[i][j][ind])
+                # index[i][j].save("model/" + str(i) + "-" + str(j))
+                # del index[i][j]
+                # gc.collect()
+    for i in range(stage_nums[stage_length - 1]):
+        if index[stage_length - 1][i] is None:
+            continue
+        mean_abs_err = index[stage_length - 1][i].cal_err()
+        if mean_abs_err > 100:
+            index[stage_length - 1][i] = BTree(2)
+            index[stage_length - 1][i].build(tmp_inputs[stage_length - 1][i], tmp_labels[stage_length - 1][i])
+        # else:
+        #     index[stage_length - 1][i].save("model/" + str(i) + "-" + str(j))
+        #     del [stage_length - 1][i]
+        #     gc.collect()
     return index
 
 
 def train_index(distribution):
-    path = filePath[distribution]    
+    path = filePath[distribution]
     data = pd.read_csv(path)
     train_set_x = []
     train_set_y = []
@@ -91,23 +104,48 @@ def train_index(distribution):
         if i % 10 == 0:
             test_set_x.append(data.ix[i, 0])
             test_set_y.append(data.ix[i, 1])
-        else:
-            train_set_x.append(data.ix[i, 0])
-            train_set_y.append(data.ix[i, 1])
+        train_set_x.append(data.ix[i, 0])
+        train_set_y.append(data.ix[i, 1])
 
+    print("*************strat Learned NN************")
     print("Start Train")
+    start_time = time.time()
     trained_index = hybrid_training(stage_set, core_set, train_step_set, batch_size_set, learning_rate_set,
                                     keep_ratio_set, train_set_x, train_set_y, test_set_x, test_set_y)
+    end_time = time.time()
+    print("Build Learned NN time ", end_time - start_time)
     print("Calculate Error")
     err = 0
+    start_time = time.time()
     for ind in range(len(test_set_x)):
         pre1 = trained_index[0][0].predict(test_set_x[ind])
         if pre1 > stage_set[1] - 1:
             pre1 = stage_set[1] - 1
         pre2 = trained_index[1][pre1].predict(test_set_x[ind])
         err += abs(pre2 - test_set_y[ind])
-        
+    end_time = time.time()
+    print("Search time ", (end_time - start_time) / len(test_set_x))
     print("mean error = ", err * 1.0 / len(test_set_x))
+    print("*************end Learned NN************\n\n")
+    del trained_index
+    gc.collect()
+    print("*************start BTree************")
+    bt = BTree(2)
+    print("Start Build")
+    start_time = time.time()
+    bt.build(train_set_x, train_set_y)
+    end_time = time.time()
+    print("Build BTree time ", end_time - start_time)
+    err = 0
+    print("Calculate error")
+    start_time = time.time()
+    for ind in range(len(test_set_x)):
+        pre = bt.predict(test_set_x[ind])
+        err += abs(pre - test_set_y[ind])
+    end_time = time.time()
+    print("Search time ", (end_time - start_time) / len(test_set_x))
+    print("mean error = ", err * 1.0 / len(test_set_x))
+    print("*************end Learned NN************")
 
 
 if __name__ == "__main__":
