@@ -59,4 +59,4 @@ def create_data(distribution, data_size=SIZE):
 
 
 if __name__ == "__main__":
-    create_data(Distribution.NORMAL)
+    create_data(Distribution.RANDOM)
