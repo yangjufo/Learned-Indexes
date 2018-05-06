@@ -7,7 +7,7 @@ import gc
 import csv
 
 BLOCK_SIZE = 100
-TOTAL_NUMBER = 1000000
+TOTAL_NUMBER = 100000
 
 filePath = {
     Distribution.RANDOM: "data/random.csv",
@@ -157,6 +157,61 @@ def train_index(distribution):
     print("mean error = ", err * 1.0 / len(test_set_x))
     print("*************end Learned NN************")
 
+def sample_train(distribution):
+    path = filePath[distribution]
+    data = pd.read_csv(path)
+    train_set_x = []
+    train_set_y = []
+    test_set_x = []
+    test_set_y = []
+
+    set_data_type(distribution)
+    if distribution == Distribution.RANDOM:
+        parameter = ParameterPool.RANDOM.value
+    elif distribution == Distribution.LOGNORMAL:
+        parameter = ParameterPool.LOGNORMAL.value
+    elif distribution == Distribution.EXPONENTIAL:
+        parameter = ParameterPool.EXPONENTIAL.value
+    elif distribution == Distribution.NORMAL:
+        parameter = ParameterPool.NORMAL.value
+    else:
+        return
+    stage_set = parameter.stage_set
+    core_set = parameter.core_set
+    train_step_set = parameter.train_step_set
+    batch_size_set = parameter.batch_size_set
+    learning_rate_set = parameter.learning_rate_set
+    keep_ratio_set = parameter.keep_ratio_set
+
+    start = 0
+
+    for i in range(start, start + TOTAL_NUMBER - 1):
+        if i % 10 == 0:
+            train_set_x.append(data.ix[i, 0])
+            train_set_y.append(data.ix[i, 1])
+        test_set_x.append(data.ix[i, 0])
+        test_set_y.append(data.ix[i, 1])
+
+    print("*************strat Learned NN************")
+    print("Start Train")
+    start_time = time.time()
+    trained_index = hybrid_training(stage_set, core_set, train_step_set, batch_size_set, learning_rate_set,
+                                    keep_ratio_set, train_set_x, train_set_y, test_set_x, test_set_y)
+    end_time = time.time()
+    print("Build Learned NN time ", end_time - start_time)
+    print("Calculate Error")
+    err = 0
+    start_time = time.time()
+    for ind in range(len(test_set_x)):
+        pre1 = trained_index[0][0].predict(test_set_x[ind])
+        if pre1 > stage_set[1] - 1:
+            pre1 = stage_set[1] - 1
+        pre2 = trained_index[1][pre1].predict(test_set_x[ind])
+        err += abs(pre2 - test_set_y[ind])
+    end_time = time.time()
+    print("Average error ", err * 1.0 / len(test_set_x))
+    print("Search time ", (end_time - start_time) / len(test_set_x))
 
 if __name__ == "__main__":
-    train_index(Distribution.EXPONENTIAL)
+   # train_index(Distribution.EXPONENTIAL)
+   sample_train(Distribution.RANDOM)
