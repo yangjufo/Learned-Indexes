@@ -1,15 +1,7 @@
 import tensorflow as tf
 import numpy as np
 from enum import Enum
-
-
-class Distribution(Enum):
-    RANDOM = 0
-    BINOMIAL = 1
-    POISSON = 2
-    EXPONENTIAL = 3
-    NORMAL = 4
-    LOGNORMAL = 5
+from data.create_data import Distribution
 
 
 DATA_TYPE = Distribution.RANDOM
@@ -35,8 +27,8 @@ class ParameterPool(Enum):
                        batch_sizes=[50, 50], learning_rates=[0.0001, 0.001], keep_ratios=[0.9, 0.9])
     LOGNORMAL = Parameter(stages=[1, 100], cores=[[1, 16, 16, 1], [1, 8, 1]], train_steps=[2000, 400],
                           batch_sizes=[100, 50], learning_rates=[0.0001, 0.001], keep_ratios=[1.0, 0.9])
-    EXPONENTIAL = Parameter(stages=[1, 100], cores=[[1, 8, 1], [1, 8, 1]], train_steps=[1700, 200],
-                            batch_sizes=[50, 50], learning_rates=[0.001, 0.001], keep_ratios=[0.9, 1.0])
+    EXPONENTIAL = Parameter(stages=[1, 100], cores=[[1, 8, 1], [1, 1]], train_steps=[1700, 2000],
+                            batch_sizes=[50, 50], learning_rates=[0.001, 0.001], keep_ratios=[0.5, 1.0])
     # EXPONENTIAL = Parameter(stages=[1, 100], cores=[[1, 16, 16, 1], [1, 8, 1]], train_steps=[20000, 300],
     #                       batch_sizes=[20, 50], learning_rates=[0.0001, 0.001], keep_ratios=[1.0, 1.0])
     NORMAL = Parameter(stages=[1, 100], cores=[[1, 8, 1], [1, 8, 1]], train_steps=[20000, 300],
@@ -55,7 +47,7 @@ def weight_variable(shape):
     elif DATA_TYPE == Distribution.NORMAL:
         initial = tf.truncated_normal(shape=shape, mean=0.1, stddev=0.1)
     else:
-        initial = tf.zeros(shape=shape)
+        initial = tf.constant(0.1, shape=shape)
     return tf.Variable(initial)
 
 
@@ -115,21 +107,10 @@ class TrainedNN:
             self.sess.run(self.train_step,
                           feed_dict={self.h_fc_drop[0]: self.batch_x, self.y_: self.batch_y,
                                      self.keep_prob: self.keep_ratio})
-            if step != 0 and step % 100 == 0:
-                if len(self.train_x) > len(self.test_x):
-                    print("cross_entropy: %f" % self.sess.run(self.cross_entropy,
-                                                              feed_dict={self.h_fc_drop[0]: self.test_x,
-                                                                         self.y_: self.test_y,
-                                                                         self.keep_prob: 1.0}))
-                else:
-                    print("cross_entropy: %f" % self.sess.run(self.cross_entropy,
-                                                              feed_dict={self.h_fc_drop[0]: np.array([self.train_x]).T,
-                                                                         self.y_: np.array([self.train_y]).T,
-                                                                         self.keep_prob: 1.0}))
 
-            # tmp_w0 = self.sess.run(self.w_fc[0], feed_dict={self.h_fc_drop[0]: self.batch_x,
-            #                                                 self.y_: self.batch_y,
-            #                                                 self.keep_prob: 1.0})
+            tmp_w0 = self.sess.run(self.w_fc[0], feed_dict={self.h_fc_drop[0]: self.batch_x,
+                                                             self.y_: self.batch_y,
+                                                             self.keep_prob: 1.0})
             # tmp_w1 = self.sess.run(self.w_fc[1], feed_dict={self.h_fc_drop[0]: self.batch_x,
             #                                                 self.y_: self.batch_y,
             #                                                 self.keep_prob: 1.0})
@@ -139,9 +120,17 @@ class TrainedNN:
             # tmp_c = self.sess.run(self.cross_entropy, feed_dict={self.h_fc_drop[0]: self.batch_x,
             #                                                      self.y_: self.batch_y,
             #                                                      self.keep_prob: 1.0})
-            # tmp_y = self.sess.run(self.h_fc[0], feed_dict={self.h_fc_drop[0]: self.batch_x,
-            #                                                self.y_: self.batch_y,
-            #                                                self.keep_prob: 1.0})
+            tmp_y = self.sess.run(self.h_fc[0], feed_dict={self.h_fc_drop[0]: self.batch_x,
+                                                            self.y_: self.batch_y,
+                                                            self.keep_prob: 1.0})
+
+            if step != 0 and step % 100 == 0:
+                err = self.sess.run(self.cross_entropy, feed_dict={self.h_fc_drop[0]: np.array([self.train_x]).T,
+                                                                   self.y_: np.array([self.train_y]).T,
+                                                                   self.keep_prob: 1.0})
+                print("cross_entropy: %f" % err)
+                if err < 1:
+                    return
 
             self.next_batch()
 
@@ -159,3 +148,19 @@ class TrainedNN:
     def save(self, path):
         saver = tf.train.Saver()
         saver.save(self.sess, path)
+
+    def get_weight(self):
+        weight = []
+        for i in range(len(self.core_nums) - 1):
+            weight.append(self.sess.run(self.w_fc[i], feed_dict={self.h_fc_drop[0]: np.array([self.train_x]).T,
+                                                                self.y_: np.array([self.train_y]).T,
+                                                                self.keep_prob: 1.0}).tolist())
+        return weight
+
+    def get_bias(self):
+        bias = []
+        for i in range(len(self.core_nums) - 1):
+            bias.append(self.sess.run(self.b_fc[i], feed_dict={self.h_fc_drop[0]: np.array([self.train_x]).T,
+                                                                 self.y_: np.array([self.train_y]).T,
+                                                                 self.keep_prob: 1.0}).tolist())
+        return bias

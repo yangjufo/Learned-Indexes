@@ -1,10 +1,12 @@
 from __future__ import print_function
 import pandas as pd
-from Trained_NN import TrainedNN, ParameterPool, Distribution, set_data_type
+from Trained_NN import TrainedNN, ParameterPool, set_data_type
 from btree import BTree
+from data.create_data import create_data, Distribution
 import time
 import gc
-import csv
+import json
+import os
 
 BLOCK_SIZE = 100
 TOTAL_NUMBER = 100000
@@ -36,7 +38,7 @@ def hybrid_training(stage_nums, core_nums, train_step_nums, batch_size_nums, lea
             inputs = tmp_inputs[i][j]
             labels = []
             test_labels = []
-            if i == 10:
+            if i == 0:
                 divisor = stage_nums[i + 1] * 1.0 / (TOTAL_NUMBER / BLOCK_SIZE)
                 for k in tmp_labels[i][j]:
                     labels.append(int(k * divisor))
@@ -49,40 +51,17 @@ def hybrid_training(stage_nums, core_nums, train_step_nums, batch_size_nums, lea
                                     keep_ratio_nums[i], inputs, labels, test_inputs, test_labels)
             index[i][j].train()
 
-            # if i < stage_length - 1:
-            #     for ind in range(len(tmp_inputs[i][j])):
-            #         p = index[i][j].predict(tmp_inputs[i][j][ind])
-            #         if p > stage_nums[i + 1] - 1:
-            #             p = stage_nums[i + 1] - 1
-            #         tmp_inputs[i + 1][p].append(tmp_inputs[i][j][ind])
-            #         tmp_labels[i + 1][p].append(tmp_labels[i][j][ind])                    
-            #     for j in range(stage_nums[i+1]):
-            #         res_path = "test/data_"+ str(j) + ".csv"                    
-            #         with open(res_path, 'wb') as csvFile:
-            #             csv_writer = csv.writer(csvFile)                                        
-            #             for ind in range(len(tmp_inputs[i+1][j])):  
-            #                 csv_writer.writerow([tmp_inputs[i+1][j][ind], tmp_labels[i+1][j][ind]])
-                # index[i][j].save("model/" + str(i) + "-" + str(j))
-                # del index[i][j]
-                # gc.collect()
-    for i in range(stage_nums[stage_length - 1]):
-        if index[stage_length - 1][i] is None:
-            continue
-        mean_abs_err = index[stage_length - 1][i].cal_err()
-        if mean_abs_err > 100:
-            print("Using BTree")
-            index[stage_length - 1][i] = BTree(2)
-            index[stage_length - 1][i].build(tmp_inputs[stage_length - 1][i], tmp_labels[stage_length - 1][i])
-        # else:
-        #     index[stage_length - 1][i].save("model/" + str(i) + "-" + str(j))
-        #     del [stage_length - 1][i]
-        #     gc.collect()
+            if i < stage_length - 1:
+                for ind in range(len(tmp_inputs[i][j])):
+                    p = index[i][j].predict(tmp_inputs[i][j][ind])
+                    if p > stage_nums[i + 1] - 1:
+                        p = stage_nums[i + 1] - 1
+                    tmp_inputs[i + 1][p].append(tmp_inputs[i][j][ind])
+                    tmp_labels[i + 1][p].append(tmp_labels[i][j][ind])
     return index
 
 
-def train_index(distribution):
-    #path = filePath[distribution]
-    path = "test/data_84.csv"    
+def train_index(distribution, path):
     data = pd.read_csv(path)
     train_set_x = []
     train_set_y = []
@@ -101,17 +80,16 @@ def train_index(distribution):
     else:
         return
     stage_set = parameter.stage_set
+    stage_set[1] = data.shape[0] / 10000
     core_set = parameter.core_set
     train_step_set = parameter.train_step_set
     batch_size_set = parameter.batch_size_set
     learning_rate_set = parameter.learning_rate_set
     keep_ratio_set = parameter.keep_ratio_set
 
-    start = 0
-
+    global TOTAL_NUMBER
     TOTAL_NUMBER = data.shape[0]
-    for i in range(start, start + TOTAL_NUMBER - 1):
-        # if i % 10 == 0:
+    for i in range(TOTAL_NUMBER - 1):
         test_set_x.append(data.ix[i, 0])
         test_set_y.append(data.ix[i, 1])
         train_set_x.append(data.ix[i, 0])
@@ -123,29 +101,50 @@ def train_index(distribution):
     trained_index = hybrid_training(stage_set, core_set, train_step_set, batch_size_set, learning_rate_set,
                                     keep_ratio_set, train_set_x, train_set_y, test_set_x, test_set_y)
     end_time = time.time()
-    print("Build Learned NN time ", end_time - start_time)
+    learn_time = end_time - start_time
+    print("Build Learned NN time ", learn_time)
     print("Calculate Error")
     err = 0
     start_time = time.time()
     for ind in range(len(test_set_x)):
         pre1 = trained_index[0][0].predict(test_set_x[ind])
-        # if pre1 > stage_set[1] - 1:
-        #     pre1 = stage_set[1] - 1
-        # pre2 = trained_index[1][pre1].predict(test_set_x[ind])
-        err += abs(pre1 - test_set_y[ind])        
+        if pre1 > stage_set[1] - 1:
+            pre1 = stage_set[1] - 1
+        pre2 = trained_index[1][pre1].predict(test_set_x[ind])
+        err += abs(pre2 - test_set_y[ind])
     end_time = time.time()
-    print("Search time ", (end_time - start_time) / len(test_set_x))
-    print("mean error = ", err * 1.0 / len(test_set_x))
+    search_time = (end_time - start_time) / len(test_set_x)
+    print("Search time ", search_time)
+    mean_error = err * 1.0 / len(test_set_x)
+    print("mean error = ", mean_error)
     print("*************end Learned NN************\n\n")
+    result_stage1 = {0: {"weights": trained_index[0][0].get_weight(), "bias": trained_index[0][0].get_bias()}}
+    result_stage2 = {}
+    for ind in range(len(trained_index[1])):
+        if trained_index[1][ind] is None:
+            continue
+        result_stage2[ind] = {"weights": trained_index[1][ind].get_weight(), "bias": trained_index[1][ind].get_bias()}
+    result = [{"stage": 1, "parameters": result_stage1}, {"stage": 2, "parameters": result_stage2}]
+
+    with open("model/NN/" + str(TOTAL_NUMBER) + ".json", "wb") as jsonFile:
+        json.dump(result, jsonFile)
+
+    performance_NN = {"type": "NN", "build time": learn_time, "search time": search_time, "average error": mean_error,
+                      "store size": os.path.getsize("model/NN/" + str(TOTAL_NUMBER) + ".json")}
+    with open("performance/NN/" + str(TOTAL_NUMBER) + ".json", "wb") as jsonFile:
+        json.dump(performance_NN, jsonFile)
+
     del trained_index
     gc.collect()
+
     print("*************start BTree************")
     bt = BTree(2)
     print("Start Build")
     start_time = time.time()
     bt.build(train_set_x, train_set_y)
     end_time = time.time()
-    print("Build BTree time ", end_time - start_time)
+    build_time = end_time - start_time
+    print("Build BTree time ", build_time)
     err = 0
     print("Calculate error")
     start_time = time.time()
@@ -153,9 +152,35 @@ def train_index(distribution):
         pre = bt.predict(test_set_x[ind])
         err += abs(pre - test_set_y[ind])
     end_time = time.time()
-    print("Search time ", (end_time - start_time) / len(test_set_x))
-    print("mean error = ", err * 1.0 / len(test_set_x))
-    print("*************end Learned NN************")
+    search_time = (end_time - start_time) / len(test_set_x)
+    print("Search time ", search_time)
+    mean_error = err * 1.0 / len(test_set_x)
+    print("mean error = ", mean_error)
+    print("*************end BTree************")
+
+    result = []
+    for ind, node in bt.nodes.items():
+        item = {}
+        for ni in node.items:
+            if ni is None:
+                continue
+            item = {"key" : ni.k, "value": ni.v}
+        tmp = {"index": node.index, "isLeaf": node.isLeaf, "children": node.children, "items": item,
+               "numberOfkeys": node.numberOfKeys}
+        result.append(tmp)
+
+    with open("model/BTree/" + str(TOTAL_NUMBER) + ".json", "wb") as jsonFile:
+        json.dump(result, jsonFile)
+
+    performance_BTree = {"type": "BTree", "build time": build_time, "search time": search_time,
+                         "average error": mean_error,
+                         "store size": os.path.getsize("model/BTree/" + str(TOTAL_NUMBER) + ".json")}
+    with open("performance/BTree/" + str(TOTAL_NUMBER) + ".json", "wb") as jsonFile:
+        json.dump(performance_BTree, jsonFile)
+
+    del bt
+    gc.collect()
+
 
 def sample_train(distribution):
     path = filePath[distribution]
@@ -212,6 +237,9 @@ def sample_train(distribution):
     print("Average error ", err * 1.0 / len(test_set_x))
     print("Search time ", (end_time - start_time) / len(test_set_x))
 
+
 if __name__ == "__main__":
-   # train_index(Distribution.EXPONENTIAL)
-   sample_train(Distribution.RANDOM)
+    numbers = [3000001, 5000001, 10000001]
+    for num in numbers:
+        create_data(Distribution.RANDOM, num)
+        train_index(Distribution.RANDOM, filePath[Distribution.RANDOM])
