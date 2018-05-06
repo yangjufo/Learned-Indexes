@@ -4,6 +4,7 @@ from Trained_NN import TrainedNN, ParameterPool, Distribution, set_data_type
 from btree import BTree
 import time
 import gc
+import csv
 
 BLOCK_SIZE = 100
 TOTAL_NUMBER = 1000000
@@ -35,7 +36,7 @@ def hybrid_training(stage_nums, core_nums, train_step_nums, batch_size_nums, lea
             inputs = tmp_inputs[i][j]
             labels = []
             test_labels = []
-            if i == 0:
+            if i == 10:
                 divisor = stage_nums[i + 1] * 1.0 / (TOTAL_NUMBER / BLOCK_SIZE)
                 for k in tmp_labels[i][j]:
                     labels.append(int(k * divisor))
@@ -48,13 +49,19 @@ def hybrid_training(stage_nums, core_nums, train_step_nums, batch_size_nums, lea
                                     keep_ratio_nums[i], inputs, labels, test_inputs, test_labels)
             index[i][j].train()
 
-            if i < stage_length - 1:
-                for ind in range(len(tmp_inputs[i][j])):
-                    p = index[i][j].predict(tmp_inputs[i][j][ind])
-                    if p > stage_nums[i + 1] - 1:
-                        p = stage_nums[i + 1] - 1
-                    tmp_inputs[i + 1][p].append(tmp_inputs[i][j][ind])
-                    tmp_labels[i + 1][p].append(tmp_labels[i][j][ind])
+            # if i < stage_length - 1:
+            #     for ind in range(len(tmp_inputs[i][j])):
+            #         p = index[i][j].predict(tmp_inputs[i][j][ind])
+            #         if p > stage_nums[i + 1] - 1:
+            #             p = stage_nums[i + 1] - 1
+            #         tmp_inputs[i + 1][p].append(tmp_inputs[i][j][ind])
+            #         tmp_labels[i + 1][p].append(tmp_labels[i][j][ind])                    
+            #     for j in range(stage_nums[i+1]):
+            #         res_path = "test/data_"+ str(j) + ".csv"                    
+            #         with open(res_path, 'wb') as csvFile:
+            #             csv_writer = csv.writer(csvFile)                                        
+            #             for ind in range(len(tmp_inputs[i+1][j])):  
+            #                 csv_writer.writerow([tmp_inputs[i+1][j][ind], tmp_labels[i+1][j][ind]])
                 # index[i][j].save("model/" + str(i) + "-" + str(j))
                 # del index[i][j]
                 # gc.collect()
@@ -63,6 +70,7 @@ def hybrid_training(stage_nums, core_nums, train_step_nums, batch_size_nums, lea
             continue
         mean_abs_err = index[stage_length - 1][i].cal_err()
         if mean_abs_err > 100:
+            print("Using BTree")
             index[stage_length - 1][i] = BTree(2)
             index[stage_length - 1][i].build(tmp_inputs[stage_length - 1][i], tmp_labels[stage_length - 1][i])
         # else:
@@ -73,7 +81,8 @@ def hybrid_training(stage_nums, core_nums, train_step_nums, batch_size_nums, lea
 
 
 def train_index(distribution):
-    path = filePath[distribution]
+    #path = filePath[distribution]
+    path = "test/data_84.csv"    
     data = pd.read_csv(path)
     train_set_x = []
     train_set_y = []
@@ -100,10 +109,11 @@ def train_index(distribution):
 
     start = 0
 
+    TOTAL_NUMBER = data.shape[0]
     for i in range(start, start + TOTAL_NUMBER - 1):
-        if i % 10 == 0:
-            test_set_x.append(data.ix[i, 0])
-            test_set_y.append(data.ix[i, 1])
+        # if i % 10 == 0:
+        test_set_x.append(data.ix[i, 0])
+        test_set_y.append(data.ix[i, 1])
         train_set_x.append(data.ix[i, 0])
         train_set_y.append(data.ix[i, 1])
 
@@ -119,10 +129,10 @@ def train_index(distribution):
     start_time = time.time()
     for ind in range(len(test_set_x)):
         pre1 = trained_index[0][0].predict(test_set_x[ind])
-        if pre1 > stage_set[1] - 1:
-            pre1 = stage_set[1] - 1
-        pre2 = trained_index[1][pre1].predict(test_set_x[ind])
-        err += abs(pre2 - test_set_y[ind])
+        # if pre1 > stage_set[1] - 1:
+        #     pre1 = stage_set[1] - 1
+        # pre2 = trained_index[1][pre1].predict(test_set_x[ind])
+        err += abs(pre1 - test_set_y[ind])        
     end_time = time.time()
     print("Search time ", (end_time - start_time) / len(test_set_x))
     print("mean error = ", err * 1.0 / len(test_set_x))
