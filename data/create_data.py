@@ -3,7 +3,7 @@ import numpy as np
 import csv
 import random
 
-SIZE = 100000
+SIZE = 300000
 BLOCK_SIZE = 100
 
 

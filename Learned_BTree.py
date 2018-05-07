@@ -9,7 +9,7 @@ import json
 import os
 
 BLOCK_SIZE = 100
-TOTAL_NUMBER = 100000
+TOTAL_NUMBER = 300000
 
 filePath = {
     Distribution.RANDOM: "data/random.csv",
@@ -61,7 +61,7 @@ def hybrid_training(stage_nums, core_nums, train_step_nums, batch_size_nums, lea
     return index
 
 
-def train_index(distribution, path):
+def sample_train(distribution, training_percent, path):
     data = pd.read_csv(path)
     train_set_x = []
     train_set_y = []
@@ -89,11 +89,13 @@ def train_index(distribution, path):
 
     global TOTAL_NUMBER
     TOTAL_NUMBER = data.shape[0]
+	interval = 1 / training_percent
     for i in range(TOTAL_NUMBER - 1):
         test_set_x.append(data.ix[i, 0])
         test_set_y.append(data.ix[i, 1])
-        train_set_x.append(data.ix[i, 0])
-        train_set_y.append(data.ix[i, 1])
+		if i % interval == 0:
+	        train_set_x.append(data.ix[i, 0])
+    	    train_set_y.append(data.ix[i, 1])
 
     print("*************strat Learned NN************")
     print("Start Train")
@@ -126,120 +128,21 @@ def train_index(distribution, path):
         result_stage2[ind] = {"weights": trained_index[1][ind].get_weight(), "bias": trained_index[1][ind].get_bias()}
     result = [{"stage": 1, "parameters": result_stage1}, {"stage": 2, "parameters": result_stage2}]
 
-    with open("model/NN/" + str(TOTAL_NUMBER) + ".json", "wb") as jsonFile:
+    with open("model/NN/" + str(training_percent) + ".json", "wb") as jsonFile:
         json.dump(result, jsonFile)
 
     performance_NN = {"type": "NN", "build time": learn_time, "search time": search_time, "average error": mean_error,
                       "store size": os.path.getsize("model/NN/" + str(TOTAL_NUMBER) + ".json")}
-    with open("performance/NN/" + str(TOTAL_NUMBER) + ".json", "wb") as jsonFile:
+    with open("sample_performance/NN/" + str(training_percent) + ".json", "wb") as jsonFile:
         json.dump(performance_NN, jsonFile)
 
     del trained_index
     gc.collect()
 
-    print("*************start BTree************")
-    bt = BTree(2)
-    print("Start Build")
-    start_time = time.time()
-    bt.build(train_set_x, train_set_y)
-    end_time = time.time()
-    build_time = end_time - start_time
-    print("Build BTree time ", build_time)
-    err = 0
-    print("Calculate error")
-    start_time = time.time()
-    for ind in range(len(test_set_x)):
-        pre = bt.predict(test_set_x[ind])
-        err += abs(pre - test_set_y[ind])
-    end_time = time.time()
-    search_time = (end_time - start_time) / len(test_set_x)
-    print("Search time ", search_time)
-    mean_error = err * 1.0 / len(test_set_x)
-    print("mean error = ", mean_error)
-    print("*************end BTree************")
 
-    result = []
-    for ind, node in bt.nodes.items():
-        item = {}
-        for ni in node.items:
-            if ni is None:
-                continue
-            item = {"key" : ni.k, "value": ni.v}
-        tmp = {"index": node.index, "isLeaf": node.isLeaf, "children": node.children, "items": item,
-               "numberOfkeys": node.numberOfKeys}
-        result.append(tmp)
-
-    with open("model/BTree/" + str(TOTAL_NUMBER) + ".json", "wb") as jsonFile:
-        json.dump(result, jsonFile)
-
-    performance_BTree = {"type": "BTree", "build time": build_time, "search time": search_time,
-                         "average error": mean_error,
-                         "store size": os.path.getsize("model/BTree/" + str(TOTAL_NUMBER) + ".json")}
-    with open("performance/BTree/" + str(TOTAL_NUMBER) + ".json", "wb") as jsonFile:
-        json.dump(performance_BTree, jsonFile)
-
-    del bt
-    gc.collect()
-
-
-def sample_train(distribution):
-    path = filePath[distribution]
-    data = pd.read_csv(path)
-    train_set_x = []
-    train_set_y = []
-    test_set_x = []
-    test_set_y = []
-
-    set_data_type(distribution)
-    if distribution == Distribution.RANDOM:
-        parameter = ParameterPool.RANDOM.value
-    elif distribution == Distribution.LOGNORMAL:
-        parameter = ParameterPool.LOGNORMAL.value
-    elif distribution == Distribution.EXPONENTIAL:
-        parameter = ParameterPool.EXPONENTIAL.value
-    elif distribution == Distribution.NORMAL:
-        parameter = ParameterPool.NORMAL.value
-    else:
-        return
-    stage_set = parameter.stage_set
-    core_set = parameter.core_set
-    train_step_set = parameter.train_step_set
-    batch_size_set = parameter.batch_size_set
-    learning_rate_set = parameter.learning_rate_set
-    keep_ratio_set = parameter.keep_ratio_set
-
-    start = 0
-
-    for i in range(start, start + TOTAL_NUMBER - 1):
-        if i % 10 == 0:
-            train_set_x.append(data.ix[i, 0])
-            train_set_y.append(data.ix[i, 1])
-        test_set_x.append(data.ix[i, 0])
-        test_set_y.append(data.ix[i, 1])
-
-    print("*************strat Learned NN************")
-    print("Start Train")
-    start_time = time.time()
-    trained_index = hybrid_training(stage_set, core_set, train_step_set, batch_size_set, learning_rate_set,
-                                    keep_ratio_set, train_set_x, train_set_y, test_set_x, test_set_y)
-    end_time = time.time()
-    print("Build Learned NN time ", end_time - start_time)
-    print("Calculate Error")
-    err = 0
-    start_time = time.time()
-    for ind in range(len(test_set_x)):
-        pre1 = trained_index[0][0].predict(test_set_x[ind])
-        if pre1 > stage_set[1] - 1:
-            pre1 = stage_set[1] - 1
-        pre2 = trained_index[1][pre1].predict(test_set_x[ind])
-        err += abs(pre2 - test_set_y[ind])
-    end_time = time.time()
-    print("Average error ", err * 1.0 / len(test_set_x))
-    print("Search time ", (end_time - start_time) / len(test_set_x))
 
 
 if __name__ == "__main__":
-    numbers = [3000001, 5000001, 10000001]
-    for num in numbers:
-        create_data(Distribution.RANDOM, num)
-        train_index(Distribution.RANDOM, filePath[Distribution.RANDOM])
+    percents = [0.1, 0.3, 0.5, 0.8, 1.0]
+    for per in percents:
+        train_index(Distribution.RANDOM, per, filePath[Distribution.RANDOM])
