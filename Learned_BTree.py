@@ -21,7 +21,8 @@ filePath = {
 }
 
 
-def hybrid_training(stage_nums, core_nums, train_step_nums, batch_size_nums, learning_rate_nums, keep_ratio_nums,
+def hybrid_training(threshold, stage_nums, core_nums, train_step_nums, batch_size_nums, learning_rate_nums,
+                    keep_ratio_nums,
                     train_data_x, train_data_y, test_data_x, test_data_y):
     stage_length = len(stage_nums)
     col_num = stage_nums[1]
@@ -47,8 +48,13 @@ def hybrid_training(stage_nums, core_nums, train_step_nums, batch_size_nums, lea
             else:
                 labels = tmp_labels[i][j]
                 test_labels = test_data_y
-            index[i][j] = TrainedNN(core_nums[i], train_step_nums[i], batch_size_nums[i], learning_rate_nums[i],
-                                    keep_ratio_nums[i], inputs, labels, test_inputs, test_labels)
+            if i == 0:
+                index[i][j] = TrainedNN(1, core_nums[i], train_step_nums[i], batch_size_nums[i], learning_rate_nums[i],
+                                        keep_ratio_nums[i], inputs, labels, test_inputs, test_labels)
+            else:
+                index[i][j] = TrainedNN(threshold, core_nums[i], train_step_nums[i], batch_size_nums[i],
+                                        learning_rate_nums[i],
+                                        keep_ratio_nums[i], inputs, labels, test_inputs, test_labels)
             index[i][j].train()
 
             if i < stage_length - 1:
@@ -58,10 +64,19 @@ def hybrid_training(stage_nums, core_nums, train_step_nums, batch_size_nums, lea
                         p = stage_nums[i + 1] - 1
                     tmp_inputs[i + 1][p].append(tmp_inputs[i][j][ind])
                     tmp_labels[i + 1][p].append(tmp_labels[i][j][ind])
+
+    for i in range(stage_nums[stage_length - 1]):
+        if index[stage_length - 1][i] is None:
+            continue
+        mean_abs_err = index[stage_length - 1][i].cal_err()
+        if mean_abs_err > threshold:
+            print("Using BTree")
+            index[stage_length - 1][i] = BTree(2)
+            index[stage_length - 1][i].build(tmp_inputs[stage_length - 1][i], tmp_labels[stage_length - 1][i])
     return index
 
 
-def train_index(distribution, path):
+def train_index(threshold, distribution, path):
     data = pd.read_csv(path)
     train_set_x = []
     train_set_y = []
@@ -98,7 +113,7 @@ def train_index(distribution, path):
     print("*************strat Learned NN************")
     print("Start Train")
     start_time = time.time()
-    trained_index = hybrid_training(stage_set, core_set, train_step_set, batch_size_set, learning_rate_set,
+    trained_index = hybrid_training(threshold, stage_set, core_set, train_step_set, batch_size_set, learning_rate_set,
                                     keep_ratio_set, train_set_x, train_set_y, test_set_x, test_set_y)
     end_time = time.time()
     learn_time = end_time - start_time
@@ -123,7 +138,21 @@ def train_index(distribution, path):
     for ind in range(len(trained_index[1])):
         if trained_index[1][ind] is None:
             continue
-        result_stage2[ind] = {"weights": trained_index[1][ind].get_weight(), "bias": trained_index[1][ind].get_bias()}
+        if isinstance(trained_index[1][ind], BTree):
+            tmp_result = []
+            for ind, node in trained_index[1][ind].nodes.items():
+                item = {}
+                for ni in node.items:
+                    if ni is None:
+                        continue
+                    item = {"key": ni.k, "value": ni.v}
+                tmp = {"index": node.index, "isLeaf": node.isLeaf, "children": node.children, "items": item,
+                       "numberOfkeys": node.numberOfKeys}
+                tmp_result.append(tmp)
+            result_stage2[ind] = tmp_result;
+        else:
+            result_stage2[ind] = {"weights": trained_index[1][ind].get_weight(),
+                                  "bias": trained_index[1][ind].get_bias()}
     result = [{"stage": 1, "parameters": result_stage1}, {"stage": 2, "parameters": result_stage2}]
 
     with open("model/NN/" + str(TOTAL_NUMBER) + ".json", "wb") as jsonFile:
@@ -141,7 +170,7 @@ def train_index(distribution, path):
     bt = BTree(2)
     print("Start Build")
     start_time = time.time()
-    bt.build(train_set_x, train_set_y)
+    bt.build(test_set_x, test_set_y)
     end_time = time.time()
     build_time = end_time - start_time
     print("Build BTree time ", build_time)
@@ -164,7 +193,7 @@ def train_index(distribution, path):
         for ni in node.items:
             if ni is None:
                 continue
-            item = {"key" : ni.k, "value": ni.v}
+            item = {"key": ni.k, "value": ni.v}
         tmp = {"index": node.index, "isLeaf": node.isLeaf, "children": node.children, "items": item,
                "numberOfkeys": node.numberOfKeys}
         result.append(tmp)
@@ -239,7 +268,8 @@ def sample_train(distribution):
 
 
 if __name__ == "__main__":
-    numbers = [3000001, 5000001, 10000001]
-    for num in numbers:
-        create_data(Distribution.RANDOM, num)
-        train_index(Distribution.RANDOM, filePath[Distribution.RANDOM])
+    numbers = [10001, 50001, 100001, 300001, 500001, 800001, 1000001]
+    thresholds = [520, 600, 500, 400, 400, 400, 600]
+    ind = 0
+    create_data(Distribution.EXPONENTIAL, numbers[ind])
+    train_index(thresholds[ind], Distribution.EXPONENTIAL, filePath[Distribution.EXPONENTIAL])
