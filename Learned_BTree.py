@@ -80,7 +80,7 @@ def sample_train(distribution, training_percent, path):
     else:
         return
     stage_set = parameter.stage_set
-    stage_set[1] = data.shape[0] / 10000
+    stage_set[1] = int(data.shape[0] * training_percent / 10000)
     core_set = parameter.core_set
     train_step_set = parameter.train_step_set
     batch_size_set = parameter.batch_size_set
@@ -89,13 +89,21 @@ def sample_train(distribution, training_percent, path):
 
     global TOTAL_NUMBER
     TOTAL_NUMBER = data.shape[0]
-	interval = 1 / training_percent
-    for i in range(TOTAL_NUMBER - 1):
-        test_set_x.append(data.ix[i, 0])
-        test_set_y.append(data.ix[i, 1])
-		if i % interval == 0:
-	        train_set_x.append(data.ix[i, 0])
-    	    train_set_y.append(data.ix[i, 1])
+    interval = int(1 / training_percent)
+    if training_percent != 0.8:
+        for i in range(TOTAL_NUMBER):
+            test_set_x.append(data.ix[i, 0])
+            test_set_y.append(data.ix[i, 1])
+            if i % interval == 0:
+                train_set_x.append(data.ix[i, 0])
+                train_set_y.append(data.ix[i, 1])
+    else:
+        for i in range(TOTAL_NUMBER):
+            test_set_x.append(data.ix[i, 0])
+            test_set_y.append(data.ix[i, 1])
+            if i % 5 != 0:
+                train_set_x.append(data.ix[i, 0])
+                train_set_y.append(data.ix[i, 1])
 
     print("*************strat Learned NN************")
     print("Start Train")
@@ -140,9 +148,7 @@ def sample_train(distribution, training_percent, path):
     gc.collect()
 
 
-
-
 if __name__ == "__main__":
     percents = [0.1, 0.3, 0.5, 0.8, 1.0]
-    for per in percents:
-        train_index(Distribution.RANDOM, per, filePath[Distribution.RANDOM])
+    per = percents[3]
+    sample_train(Distribution.RANDOM, per, filePath[Distribution.RANDOM])
