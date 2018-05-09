@@ -3,13 +3,11 @@ import pandas as pd
 from Trained_NN import TrainedNN, ParameterPool, set_data_type
 from btree import BTree
 from data.create_data import create_data, Distribution
-import time
-import gc
-import json
-import os
+import time, gc, json
+import os, sys, getopt
 
 BLOCK_SIZE = 100
-TOTAL_NUMBER = 100000
+TOTAL_NUMBER = 300000
 
 filePath = {
     Distribution.RANDOM: "data/random.csv",
@@ -20,10 +18,17 @@ filePath = {
     Distribution.LOGNORMAL: "data/lognormal.csv"
 }
 
+pathString = {
+    Distribution.RANDOM: "Random",
+    Distribution.BINOMIAL: "Binomial",
+    Distribution.POISSON: "Poisson",
+    Distribution.EXPONENTIAL: "Exponential",
+    Distribution.NORMAL: "Normal",
+    Distribution.LOGNORMAL: "Lognormal"
+}
 
 def hybrid_training(threshold, stage_nums, core_nums, train_step_nums, batch_size_nums, learning_rate_nums,
-                    keep_ratio_nums,
-                    train_data_x, train_data_y, test_data_x, test_data_y):
+                    keep_ratio_nums, train_data_x, train_data_y, test_data_x, test_data_y):
     stage_length = len(stage_nums)
     col_num = stage_nums[1]
     tmp_inputs = [[[] for i in range(col_num)] for i in range(stage_length)]
@@ -95,7 +100,7 @@ def train_index(threshold, distribution, path):
     else:
         return
     stage_set = parameter.stage_set
-    stage_set[1] = data.shape[0] / 10000
+    stage_set[1] = int(data.shape[0] / 10000)
     core_set = parameter.core_set
     train_step_set = parameter.train_step_set
     batch_size_set = parameter.batch_size_set
@@ -104,7 +109,7 @@ def train_index(threshold, distribution, path):
 
     global TOTAL_NUMBER
     TOTAL_NUMBER = data.shape[0]
-    for i in range(TOTAL_NUMBER - 1):
+    for i in range(TOTAL_NUMBER):
         test_set_x.append(data.ix[i, 0])
         test_set_y.append(data.ix[i, 1])
         train_set_x.append(data.ix[i, 0])
@@ -155,12 +160,12 @@ def train_index(threshold, distribution, path):
                                   "bias": trained_index[1][ind].get_bias()}
     result = [{"stage": 1, "parameters": result_stage1}, {"stage": 2, "parameters": result_stage2}]
 
-    with open("model/NN/" + str(TOTAL_NUMBER) + ".json", "wb") as jsonFile:
+    with open("model/" + pathString[distribution] + "/full_train/NN/" + str(TOTAL_NUMBER) + ".json", "wb") as jsonFile:
         json.dump(result, jsonFile)
 
     performance_NN = {"type": "NN", "build time": learn_time, "search time": search_time, "average error": mean_error,
-                      "store size": os.path.getsize("model/NN/" + str(TOTAL_NUMBER) + ".json")}
-    with open("performance/NN/" + str(TOTAL_NUMBER) + ".json", "wb") as jsonFile:
+                      "store size": os.path.getsize("model/" + pathString[distribution] + "/full_train/NN/" + str(TOTAL_NUMBER) + ".json")}
+    with open("performance/" + pathString[distribution] + "/full_train/NN/" + str(TOTAL_NUMBER) + ".json", "wb") as jsonFile:
         json.dump(performance_NN, jsonFile)
 
     del trained_index
@@ -198,21 +203,20 @@ def train_index(threshold, distribution, path):
                "numberOfkeys": node.numberOfKeys}
         result.append(tmp)
 
-    with open("model/BTree/" + str(TOTAL_NUMBER) + ".json", "wb") as jsonFile:
+    with open("model/" + pathString[distribution] + "/full_train/BTree/" + str(TOTAL_NUMBER) + ".json", "wb") as jsonFile:
         json.dump(result, jsonFile)
 
     performance_BTree = {"type": "BTree", "build time": build_time, "search time": search_time,
                          "average error": mean_error,
-                         "store size": os.path.getsize("model/BTree/" + str(TOTAL_NUMBER) + ".json")}
-    with open("performance/BTree/" + str(TOTAL_NUMBER) + ".json", "wb") as jsonFile:
+                         "store size": os.path.getsize("model/" + pathString[distribution] + "/full_train/BTree/" + str(TOTAL_NUMBER) + ".json")}
+    with open("performance/" + pathString[distribution] + "/full_train/BTree/" + str(TOTAL_NUMBER) + ".json", "wb") as jsonFile:
         json.dump(performance_BTree, jsonFile)
 
     del bt
     gc.collect()
 
 
-def sample_train(distribution):
-    path = filePath[distribution]
+def sample_train(distribution, training_percent, path):
     data = pd.read_csv(path)
     train_set_x = []
     train_set_y = []
@@ -222,37 +226,53 @@ def sample_train(distribution):
     set_data_type(distribution)
     if distribution == Distribution.RANDOM:
         parameter = ParameterPool.RANDOM.value
+        threshold = 1
     elif distribution == Distribution.LOGNORMAL:
         parameter = ParameterPool.LOGNORMAL.value
+        threshold = 400
     elif distribution == Distribution.EXPONENTIAL:
         parameter = ParameterPool.EXPONENTIAL.value
+        threshold = 400
     elif distribution == Distribution.NORMAL:
         parameter = ParameterPool.NORMAL.value
+        threshold = 400
     else:
         return
     stage_set = parameter.stage_set
+    stage_set[1] = int(data.shape[0] * training_percent / 10000)
     core_set = parameter.core_set
     train_step_set = parameter.train_step_set
     batch_size_set = parameter.batch_size_set
     learning_rate_set = parameter.learning_rate_set
     keep_ratio_set = parameter.keep_ratio_set
 
-    start = 0
+    global TOTAL_NUMBER
+    TOTAL_NUMBER = data.shape[0]
+    interval = int(1 / training_percent)
+    if training_percent != 0.8:
+        for i in range(TOTAL_NUMBER):
+            test_set_x.append(data.ix[i, 0])
+            test_set_y.append(data.ix[i, 1])
+            if i % interval == 0:
+                train_set_x.append(data.ix[i, 0])
+                train_set_y.append(data.ix[i, 1])
+    else:
+        for i in range(TOTAL_NUMBER):
+            test_set_x.append(data.ix[i, 0])
+            test_set_y.append(data.ix[i, 1])
+            if i % 5 != 0:
+                train_set_x.append(data.ix[i, 0])
+                train_set_y.append(data.ix[i, 1])
 
-    for i in range(start, start + TOTAL_NUMBER - 1):
-        if i % 10 == 0:
-            train_set_x.append(data.ix[i, 0])
-            train_set_y.append(data.ix[i, 1])
-        test_set_x.append(data.ix[i, 0])
-        test_set_y.append(data.ix[i, 1])
 
     print("*************strat Learned NN************")
     print("Start Train")
     start_time = time.time()
-    trained_index = hybrid_training(stage_set, core_set, train_step_set, batch_size_set, learning_rate_set,
+    trained_index = hybrid_training(threshold, stage_set, core_set, train_step_set, batch_size_set, learning_rate_set,
                                     keep_ratio_set, train_set_x, train_set_y, test_set_x, test_set_y)
     end_time = time.time()
-    print("Build Learned NN time ", end_time - start_time)
+    learn_time = end_time - start_time
+    print("Build Learned NN time ", learn_time)
     print("Calculate Error")
     err = 0
     start_time = time.time()
@@ -263,13 +283,82 @@ def sample_train(distribution):
         pre2 = trained_index[1][pre1].predict(test_set_x[ind])
         err += abs(pre2 - test_set_y[ind])
     end_time = time.time()
-    print("Average error ", err * 1.0 / len(test_set_x))
-    print("Search time ", (end_time - start_time) / len(test_set_x))
+    search_time = (end_time - start_time) / len(test_set_x)
+    print("Search time ", search_time)
+    mean_error = err * 1.0 / len(test_set_x)
+    print("mean error = ", mean_error)
+    print("*************end Learned NN************\n\n")
+    result_stage1 = {0: {"weights": trained_index[0][0].get_weight(), "bias": trained_index[0][0].get_bias()}}
+    result_stage2 = {}
+    for ind in range(len(trained_index[1])):
+        if trained_index[1][ind] is None:
+            continue
+        if isinstance(trained_index[1][ind], BTree):
+            tmp_result = []
+            for ind, node in trained_index[1][ind].nodes.items():
+                item = {}
+                for ni in node.items:
+                    if ni is None:
+                        continue
+                    item = {"key": ni.k, "value": ni.v}
+                tmp = {"index": node.index, "isLeaf": node.isLeaf, "children": node.children, "items": item,
+                       "numberOfkeys": node.numberOfKeys}
+                tmp_result.append(tmp)
+            result_stage2[ind] = tmp_result;
+        else:
+            result_stage2[ind] = {"weights": trained_index[1][ind].get_weight(),
+                                  "bias": trained_index[1][ind].get_bias()}
+    result = [{"stage": 1, "parameters": result_stage1}, {"stage": 2, "parameters": result_stage2}]
+
+    with open("model/" + pathString[distribution] + "/sample_train/NN/" + str(training_percent) + ".json", "wb") as jsonFile:
+        json.dump(result, jsonFile)
+
+    performance_NN = {"type": "NN", "build time": learn_time, "search time": search_time, "average error": mean_error,
+                      "store size": os.path.getsize("model/" + pathString[distribution] + "/sample_train/NN/" + str(training_percent) + ".json")}
+    with open("performance/" + pathString[distribution] + "/sample_train/NN/" + str(training_percent) + ".json", "wb") as jsonFile:
+        json.dump(performance_NN, jsonFile)
+
+    del trained_index
+    gc.collect()
+
+def main(argv):
+    try:
+        opts, args = getopt.getopt(argv, "hs:f")
+    except getopt.GEtoptError:
+        print 'Leared_BTree.py -s [Distribution] [Percent] \n Leared_BTree.py -s [Distribution] [Number]'
+        sys.exit(2)
+    for opt, arg in opts:
+        if opt == '-h':
+            print 'Leared_BTree.py -s [Distribution] [Percent] \n Leared_BTree.py -s [Distribution] [Number]'
+            print 'Distribution: random, exponential'
+            print 'Percent: 0.1-1.0; Number is set to 300,000'
+            print 'Number: 10,000-1,000,000'
+        elif opt == '-s':
+            if arg[0] == "random":
+                per = float(arg[1])
+                sample_train(Distribution.RANDOM, per, filePath[Distribution.RANDOM])        
+            elif arg[1] == "exponential":
+                per = float(arg[1])
+                sample_train(Distribution.EXPONENTIAL, per, filePath[Distribution.EXPONENTIAL])
+            else:
+                print "Distribution: random, exponential"
+        elif opt == '-f':
+            if arg[0] == "random":
+                threshold = 1
+                num = int(arg[1]) + 1
+                create_data(Distribution.RANDOM, num)
+                train_index(threshold, Distribution.RANDOM, filePath[Distribution.RANDOM])
+            elif arg[1] == "exponential":
+                threshold = 400
+                num = int(arg[1]) + 1
+                create_data(Distribution.EXPONENTIAL, num)
+                train_index(threshold, Distribution.EXPONENTIAL, filePath[Distribution.EXPONENTIAL])
+            else:
+                print "Distribution: random, exponential"
+        else:
+            print "Error, please use -h for instructions."
+
 
 
 if __name__ == "__main__":
-    numbers = [10001, 50001, 100001, 300001, 500001, 800001, 1000001]
-    thresholds = [520, 600, 500, 400, 400, 400, 600]
-    ind = 0
-    create_data(Distribution.EXPONENTIAL, numbers[ind])
-    train_index(thresholds[ind], Distribution.EXPONENTIAL, filePath[Distribution.EXPONENTIAL])
+    main(sys.argv[1:])

@@ -3,7 +3,7 @@ import numpy as np
 import csv
 import random
 
-SIZE = 100000
+SIZE = 300001
 BLOCK_SIZE = 100
 
 
@@ -17,7 +17,7 @@ class Distribution(Enum):
 
 
 filePath = {
-    Distribution.RANDOM: "data/random.csv",
+    Distribution.RANDOM: "random.csv",
     Distribution.BINOMIAL: "data/binomial.csv",
     Distribution.POISSON: "data/poisson.csv",
     Distribution.EXPONENTIAL: "data/exponential.csv",
