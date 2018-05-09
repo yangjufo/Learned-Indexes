@@ -27,8 +27,9 @@ pathString = {
     Distribution.LOGNORMAL: "Lognormal"
 }
 
-def hybrid_training(threshold, stage_nums, core_nums, train_step_nums, batch_size_nums, learning_rate_nums, keep_ratio_nums,
-                    train_data_x, train_data_y, test_data_x, test_data_y):
+
+def hybrid_training(threshold, stage_nums, core_nums, train_step_nums, batch_size_nums, learning_rate_nums,
+                    keep_ratio_nums, train_data_x, train_data_y, test_data_x, test_data_y):
     stage_length = len(stage_nums)
     col_num = stage_nums[1]
     tmp_inputs = [[[] for i in range(col_num)] for i in range(stage_length)]
@@ -164,8 +165,10 @@ def train_index(threshold, distribution, path):
         json.dump(result, jsonFile)
 
     performance_NN = {"type": "NN", "build time": learn_time, "search time": search_time, "average error": mean_error,
-                      "store size": os.path.getsize("model/" + pathString[distribution] + "/full_train/NN/" + str(TOTAL_NUMBER) + ".json")}
-    with open("performance/" + pathString[distribution] + "/full_train/NN/" + str(TOTAL_NUMBER) + ".json", "wb") as jsonFile:
+                      "store size": os.path.getsize(
+                          "model/" + pathString[distribution] + "/full_train/NN/" + str(TOTAL_NUMBER) + ".json")}
+    with open("performance/" + pathString[distribution] + "/full_train/NN/" + str(TOTAL_NUMBER) + ".json",
+              "wb") as jsonFile:
         json.dump(performance_NN, jsonFile)
 
     del trained_index
@@ -203,13 +206,16 @@ def train_index(threshold, distribution, path):
                "numberOfkeys": node.numberOfKeys}
         result.append(tmp)
 
-    with open("model/" + pathString[distribution] + "/full_train/BTree/" + str(TOTAL_NUMBER) + ".json", "wb") as jsonFile:
+    with open("model/" + pathString[distribution] + "/full_train/BTree/" + str(TOTAL_NUMBER) + ".json",
+              "wb") as jsonFile:
         json.dump(result, jsonFile)
 
     performance_BTree = {"type": "BTree", "build time": build_time, "search time": search_time,
                          "average error": mean_error,
-                         "store size": os.path.getsize("model/" + pathString[distribution] + "/full_train/BTree/" + str(TOTAL_NUMBER) + ".json")}
-    with open("performance/" + pathString[distribution] + "/full_train/BTree/" + str(TOTAL_NUMBER) + ".json", "wb") as jsonFile:
+                         "store size": os.path.getsize(
+                             "model/" + pathString[distribution] + "/full_train/BTree/" + str(TOTAL_NUMBER) + ".json")}
+    with open("performance/" + pathString[distribution] + "/full_train/BTree/" + str(TOTAL_NUMBER) + ".json",
+              "wb") as jsonFile:
         json.dump(performance_BTree, jsonFile)
 
     del bt
@@ -260,7 +266,6 @@ def sample_train(threshold, distribution, training_percent, path):
                 train_set_x.append(data.ix[i, 0])
                 train_set_y.append(data.ix[i, 1])
 
-
     print("*************strat Learned NN************")
     print("Start Train")
     start_time = time.time()
@@ -306,56 +311,125 @@ def sample_train(threshold, distribution, training_percent, path):
                                   "bias": trained_index[1][ind].get_bias()}
     result = [{"stage": 1, "parameters": result_stage1}, {"stage": 2, "parameters": result_stage2}]
 
-    with open("model/" + pathString[distribution] + "/sample_train/NN/" + str(training_percent) + ".json", "wb") as jsonFile:
+    with open("model/" + pathString[distribution] + "/sample_train/NN/" + str(training_percent) + ".json",
+              "wb") as jsonFile:
         json.dump(result, jsonFile)
 
     performance_NN = {"type": "NN", "build time": learn_time, "search time": search_time, "average error": mean_error,
-                      "store size": os.path.getsize("model/" + pathString[distribution] + "/sample_train/NN/" + str(training_percent) + ".json")}
-    with open("performance/" + pathString[distribution] + "/sample_train/NN/" + str(training_percent) + ".json", "wb") as jsonFile:
+                      "store size": os.path.getsize(
+                          "model/" + pathString[distribution] + "/sample_train/NN/" + str(training_percent) + ".json")}
+    with open("performance/" + pathString[distribution] + "/sample_train/NN/" + str(training_percent) + ".json",
+              "wb") as jsonFile:
         json.dump(performance_NN, jsonFile)
 
     del trained_index
     gc.collect()
 
+
+def show_help_message(msg):
+    help_message = {'command': 'Learned_BTree.py -t <Type> -d <Distribution> [-p|-n] [Percent]|[Number] [-h]',
+                    'type': 'Type: sample, full',
+                    'distribution': 'Distribution: random, exponential',
+                    'percent': 'Percent: 0.1-1.0, default value = 0.5; train data size = 300,000',
+                    'number': 'Number: 10,000-1,000,000, default value = 300,000',
+                    'fpError': 'Percent cannot be assigned in full train.',
+                    'snError': 'Number cannot be assigned in sample train.',
+                    'noTypeError': 'Please choose the type first.',
+                    'noDistributionError': 'Please choose the distribution first.'}
+    help_message_key = ['command', 'type', 'distribution', 'percent', 'number']
+    if msg == 'all':
+        for k in help_message_key:
+            print(help_message[k])
+
+    else:
+        print(help_message['command'])
+        print('Error! ' + help_message[msg])
+
+
 def main(argv):
+    distribution = None
+    per = 0.5
+    num = 300000
+    is_sample = False
+    is_type = False
+    is_distribution = False
     try:
-        opts, args = getopt.getopt(argv, "hs:f")
-    except getopt.GEtoptError:
-        print 'Leared_BTree.py -s [Distribution] [Percent] \n Leared_BTree.py -s [Distribution] [Number]'
+        opts, args = getopt.getopt(argv, "hd:t:p:n:")
+    except getopt.GetoptError:
+        show_help_message('command')
         sys.exit(2)
     for opt, arg in opts:
+        arg = str(arg).lower()
         if opt == '-h':
-            print 'Leared_BTree.py -s [Distribution] [Percent] \n Leared_BTree.py -s [Distribution] [Number]'
-            print 'Distribution: random, exponential'
-            print 'Percent: 0.1-1.0; Number is set to 300,000'
-            print 'Number: 10,000-1,000,000'
-        elif opt == '-s':
-            if arg[0] == "random":
-                per = float(arg[1])
-                threshold = 1
-                sample_train(threshold, Distribution.RANDOM, per, filePath[Distribution.RANDOM])        
-            elif arg[1] == "exponential":
-                per = float(arg[1])
-                threshold = 400
-                sample_train(threshold, Distribution.EXPONENTIAL, per, filePath[Distribution.EXPONENTIAL])
+            show_help_message('all')
+            return
+        elif opt == '-t':
+            if arg == "sample":
+                is_sample = True
+                is_type = True
+            elif arg == "full":
+                is_sample = False
+                is_type = True
             else:
-                print "Distribution: random, exponential"
-        elif opt == '-f':
-            if arg[0] == "random":
-                threshold = 1
-                num = int(arg[1]) + 1
-                create_data(Distribution.RANDOM, num)
-                train_index(threshold, Distribution.RANDOM, filePath[Distribution.RANDOM])
-            elif arg[1] == "exponential":
-                threshold = 400
-                num = int(arg[1]) + 1
-                create_data(Distribution.EXPONENTIAL, num)
-                train_index(threshold, Distribution.EXPONENTIAL, filePath[Distribution.EXPONENTIAL])
+                show_help_message('type')
+                return
+        elif opt == '-d':
+            if not is_type:
+                show_help_message('noTypeError')
+                return
+            if arg == "random":
+                distribution = Distribution.RANDOM
+                is_distribution = True
+            elif arg == "exponential":
+                distribution = Distribution.EXPONENTIAL
+                is_distribution = True
             else:
-                print "Distribution: random, exponential"
-        else:
-            print "Error, please use -h for instructions."
+                show_help_message('distribution')
+                return
+        elif opt == '-p':
+            if not is_type:
+                show_help_message('noTypeError')
+                return
+            if not is_distribution:
+                show_help_message('noDistributionError')
+                return
+            per = float(arg)
+            if not 0.1 <= per <= 1.0:
+                show_help_message('percent')
+                return
 
+        elif opt == '-n':
+            if not is_type:
+                show_help_message('noTypeError')
+                return
+            if not is_distribution:
+                show_help_message('noDistributionError')
+                return
+            if is_sample:
+                show_help_message('snError')
+                return
+            num = int(arg) + 1
+            if not 10000 < num < 1000002:
+                show_help_message('number')
+                return
+
+        else:
+            print("Unknown parameters, please use -h for instructions.")
+            return
+
+    if not is_type:
+        show_help_message('noTypeError')
+        return
+    if not is_distribution:
+        show_help_message('noDistributionError')
+        return
+    create_data(distribution, num)
+    if is_sample:
+        threshold = 400
+        sample_train(threshold, distribution, per, filePath[distribution])
+    else:
+        threshold = 1
+        train_index(threshold, distribution, filePath[distribution])
 
 
 if __name__ == "__main__":

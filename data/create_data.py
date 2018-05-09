@@ -17,7 +17,7 @@ class Distribution(Enum):
 
 
 filePath = {
-    Distribution.RANDOM: "random.csv",
+    Distribution.RANDOM: "data/random.csv",
     Distribution.BINOMIAL: "data/binomial.csv",
     Distribution.POISSON: "data/poisson.csv",
     Distribution.EXPONENTIAL: "data/exponential.csv",
