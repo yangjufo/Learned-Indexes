@@ -46,7 +46,7 @@ def create_data(distribution, data_size=SIZE):
         i = 0
         if distribution == Distribution.EXPONENTIAL:
             for d in data:
-                csv_writer.writerow([int(d * 1000), i / BLOCK_SIZE])
+                csv_writer.writerow([int(d * 10000000), i / BLOCK_SIZE])
                 i += 1
         elif distribution == Distribution.LOGNORMAL:
             for d in data:
