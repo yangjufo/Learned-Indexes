@@ -27,8 +27,8 @@ class ParameterPool(Enum):
                        batch_sizes=[50, 50], learning_rates=[0.0001, 0.001], keep_ratios=[0.9, 0.9])
     LOGNORMAL = Parameter(stages=[1, 100], cores=[[1, 16, 16, 1], [1, 8, 1]], train_steps=[2000, 400],
                           batch_sizes=[100, 50], learning_rates=[0.0001, 0.001], keep_ratios=[1.0, 0.9])
-    EXPONENTIAL = Parameter(stages=[1, 100], cores=[[1, 8, 1], [1, 1]], train_steps=[1700, 2000],
-                            batch_sizes=[50, 50], learning_rates=[0.001, 0.001], keep_ratios=[0.5, 1.0])
+    EXPONENTIAL = Parameter(stages=[1, 100], cores=[[1, 8, 1], [1, 8, 1]], train_steps=[20000, 20000],
+                            batch_sizes=[50, 50], learning_rates=[0.0001, 0.001], keep_ratios=[0.9, 1.0])
     # EXPONENTIAL = Parameter(stages=[1, 100], cores=[[1, 16, 16, 1], [1, 8, 1]], train_steps=[20000, 300],
     #                       batch_sizes=[20, 50], learning_rates=[0.0001, 0.001], keep_ratios=[1.0, 1.0])
     NORMAL = Parameter(stages=[1, 100], cores=[[1, 8, 1], [1, 8, 1]], train_steps=[20000, 300],
@@ -57,9 +57,10 @@ def bias_variable(shape):
 
 
 class TrainedNN:
-    def __init__(self, cores, train_step_num, batch_size, learning_rate, keep_ratio, train_x, train_y, test_x, test_y):
+    def __init__(self, threshold_num, cores, train_step_num, batch_size, learning_rate, keep_ratio, train_x, train_y, test_x, test_y):
         if cores is None:
             cores = []
+        self.threshold_nums = threshold_num
         self.core_nums = cores
         self.train_step_nums = train_step_num
         self.batch_size = batch_size
@@ -129,7 +130,7 @@ class TrainedNN:
                                                                    self.y_: np.array([self.train_y]).T,
                                                                    self.keep_prob: 1.0})
                 print("cross_entropy: %f" % err)
-                if err < 1:
+                if err < self.threshold_nums:
                     return
 
             self.next_batch()
