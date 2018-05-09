@@ -1,4 +1,6 @@
 import pandas as pd
+
+
 class BTreeNode:
     def __init__(self, degree=2, number_of_keys=0, is_leaf=True, items=None, children=None,
                  index=None):
@@ -27,7 +29,7 @@ class BTreeNode:
         if i < self.numberOfKeys and an_item == self.items[i]:
             return {'found': True, 'fileIndex': self.index, 'nodeIndex': i}
         if self.isLeaf:
-            return {'found': False, 'fileIndex': None, 'nodeIndex': None}
+            return {'found': False, 'fileIndex': self.index, 'nodeIndex': i - 1}
         else:
             return b_tree.get_node(self.children[i]).search(b_tree, an_item)
 
@@ -59,9 +61,9 @@ class BTree:
 
     def predict(self, key):
         search_result = self.search(Item(key, 0))
-        if not search_result['found']:
-            return -1
         a_node = self.nodes[search_result['fileIndex']]
+        if a_node.items[search_result['nodeIndex']] is None:
+            return -1
         return a_node.items[search_result['nodeIndex']].v
 
     def split_child(self, p_node, i, c_node):
@@ -280,14 +282,11 @@ def b_tree_main():
     path = "last_data.csv"
     data = pd.read_csv(path)
     b = BTree(2)
-    for i in range(data.shape[0]):        
-        b.insert(Item(data.ix[i, 0], data.ix[i, 1]))
-    
-    err = 0
     for i in range(data.shape[0]):
-        ind = b.predict(data.ix[i, 0])    
-        err += abs(data.ix[i, 1] - ind)
-    print (err)
+        b.insert(Item(data.ix[i, 0], data.ix[i, 1]))
+
+    pos = b.predict(30310)
+    print(pos)
 
 
 if __name__ == '__main__':

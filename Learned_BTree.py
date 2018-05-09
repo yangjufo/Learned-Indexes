@@ -27,8 +27,8 @@ pathString = {
     Distribution.LOGNORMAL: "Lognormal"
 }
 
-def hybrid_training(threshold, stage_nums, core_nums, train_step_nums, batch_size_nums, learning_rate_nums,
-                    keep_ratio_nums, train_data_x, train_data_y, test_data_x, test_data_y):
+def hybrid_training(threshold, stage_nums, core_nums, train_step_nums, batch_size_nums, learning_rate_nums, keep_ratio_nums,
+                    train_data_x, train_data_y, test_data_x, test_data_y):
     stage_length = len(stage_nums)
     col_num = stage_nums[1]
     tmp_inputs = [[[] for i in range(col_num)] for i in range(stage_length)]
@@ -216,7 +216,7 @@ def train_index(threshold, distribution, path):
     gc.collect()
 
 
-def sample_train(distribution, training_percent, path):
+def sample_train(threshold, distribution, training_percent, path):
     data = pd.read_csv(path)
     train_set_x = []
     train_set_y = []
@@ -226,16 +226,12 @@ def sample_train(distribution, training_percent, path):
     set_data_type(distribution)
     if distribution == Distribution.RANDOM:
         parameter = ParameterPool.RANDOM.value
-        threshold = 1
     elif distribution == Distribution.LOGNORMAL:
         parameter = ParameterPool.LOGNORMAL.value
-        threshold = 400
     elif distribution == Distribution.EXPONENTIAL:
         parameter = ParameterPool.EXPONENTIAL.value
-        threshold = 400
     elif distribution == Distribution.NORMAL:
         parameter = ParameterPool.NORMAL.value
-        threshold = 400
     else:
         return
     stage_set = parameter.stage_set
@@ -336,10 +332,12 @@ def main(argv):
         elif opt == '-s':
             if arg[0] == "random":
                 per = float(arg[1])
-                sample_train(Distribution.RANDOM, per, filePath[Distribution.RANDOM])        
+                threshold = 1
+                sample_train(threshold, Distribution.RANDOM, per, filePath[Distribution.RANDOM])        
             elif arg[1] == "exponential":
                 per = float(arg[1])
-                sample_train(Distribution.EXPONENTIAL, per, filePath[Distribution.EXPONENTIAL])
+                threshold = 400
+                sample_train(threshold, Distribution.EXPONENTIAL, per, filePath[Distribution.EXPONENTIAL])
             else:
                 print "Distribution: random, exponential"
         elif opt == '-f':
