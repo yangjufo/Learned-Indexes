@@ -116,7 +116,7 @@ def train_index(threshold, distribution, path):
         train_set_x.append(data.ix[i, 0])
         train_set_y.append(data.ix[i, 1])
 
-    print("*************strat Learned NN************")
+    print("*************start Learned NN************")
     print("Start Train")
     start_time = time.time()
     trained_index = hybrid_training(threshold, stage_set, core_set, train_step_set, batch_size_set, learning_rate_set,
@@ -135,7 +135,7 @@ def train_index(threshold, distribution, path):
         err += abs(pre2 - test_set_y[ind])
     end_time = time.time()
     search_time = (end_time - start_time) / len(test_set_x)
-    print("Search time ", search_time)
+    print("Search time %f " % search_time)
     mean_error = err * 1.0 / len(test_set_x)
     print("mean error = ", mean_error)
     print("*************end Learned NN************\n\n")
@@ -266,7 +266,7 @@ def sample_train(threshold, distribution, training_percent, path):
                 train_set_x.append(data.ix[i, 0])
                 train_set_y.append(data.ix[i, 1])
 
-    print("*************strat Learned NN************")
+    print("*************start Learned NN************")
     print("Start Train")
     start_time = time.time()
     trained_index = hybrid_training(threshold, stage_set, core_set, train_step_set, batch_size_set, learning_rate_set,
