@@ -83,7 +83,7 @@ def hybrid_training(threshold, stage_nums, core_nums, train_step_nums, batch_siz
 
 
 def train_index(threshold, distribution, path):
-    data = pd.read_csv(path)
+    data = pd.read_csv(path, header=None)
     train_set_x = []
     train_set_y = []
     test_set_x = []
@@ -223,7 +223,7 @@ def train_index(threshold, distribution, path):
 
 
 def sample_train(threshold, distribution, training_percent, path):
-    data = pd.read_csv(path)
+    data = pd.read_csv(path, header=None)
     train_set_x = []
     train_set_y = []
     test_set_x = []
@@ -327,7 +327,7 @@ def sample_train(threshold, distribution, training_percent, path):
 
 
 def show_help_message(msg):
-    help_message = {'command': 'Learned_BTree.py -t <Type> -d <Distribution> [-p|-n] [Percent]|[Number] [-h]',
+    help_message = {'command': 'python Learned_BTree.py -t <Type> -d <Distribution> [-p|-n] [Percent]|[Number] [-h]',
                     'type': 'Type: sample, full',
                     'distribution': 'Distribution: random, exponential',
                     'percent': 'Percent: 0.1-1.0, default value = 0.5; train data size = 300,000',
@@ -408,8 +408,8 @@ def main(argv):
             if is_sample:
                 show_help_message('snError')
                 return
-            num = int(arg) + 1
-            if not 10000 < num < 1000002:
+            num = int(arg)
+            if not 10000 <= num <= 1000000:
                 show_help_message('number')
                 return
 

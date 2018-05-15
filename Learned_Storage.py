@@ -2,7 +2,7 @@ import pandas as pd
 from Trained_NN import TrainedNN, ParameterPool, set_data_type
 from btree import BTree
 from data.create_data import create_data_hash, Distribution
-import time, json, csv, math
+import time, json, math, getopt, sys
 
 STORE_NUMBER = 100001
 BLOCK_SIZE = 100
@@ -196,11 +196,6 @@ def optimize_storage(threshold, data_part_distance, learning_percent, distributi
     average_optimize_time = (end_time - start_time) * 1.0 / to_store_data.shape[0]
     print("Average Optimize Time: %f" % average_optimize_time)
 
-    with open("tmp_result.csv", 'wb') as csvFile:
-        csv_writer = csv.writer(csvFile)
-        for d in store_data:
-            csv_writer.writerow([d])
-
     print("************With Optimization**************")
     pos = 0
     ins_pos = 0
@@ -221,18 +216,21 @@ def optimize_storage(threshold, data_part_distance, learning_percent, distributi
         while (store_data[pos] > pre_data or store_data[pos] == -1) and pos > 0:
             pos -= 1
         while store_data[pos] <= pre_data and pos < len(store_data) - 1:
-            pos += 1        
+            pos += 1
         if ins_pos < pos:
             ins_pos = pos
         while store_data[ins_pos] != -1 and ins_pos < len(store_data) - 1:
             ins_pos += 1
         if ins_pos == len(store_data) - 1:
-            store_data.append(-1)
-            ins_pos += 1
-        for j in range(ins_pos, pos, -1):
-            store_data[j] = store_data[j - 1]
+            while store_data[ins_pos] != -1 and ins_pos > 0:
+                ins_pos -= 1
+            for j in range(ins_pos, pos):
+                store_data[j] = store_data[j + 1]
+        else:
+            for j in range(ins_pos, pos, -1):
+                store_data[j] = store_data[j - 1]
         store_data[pos] = pre_data
-        move_steps += ins_pos - pos
+        move_steps += abs(ins_pos - pos)
     end_time = time.time()
     average_move_steps = (move_steps * 1.0 / to_store_data.shape[0])
     average_move_time = (end_time - start_time) * 1.0 / to_store_data.shape[0]
@@ -244,45 +242,115 @@ def optimize_storage(threshold, data_part_distance, learning_percent, distributi
             learning_percent) + ".json", "wb") as jsonFile:
         json.dump(result, jsonFile)
 
-    with open("test_result.csv", 'wb') as csvFile:
-        csv_writer = csv.writer(csvFile)
-        for d in store_data:
-            csv_writer.writerow([d])
+    print("************Without Optimization**************")
+    store_data = train_set_x[:]
+    move_steps = 0
+    start_time = time.time()
+    pos = 0
+    for i in range(to_store_data.shape[0]):
+        pre_data = to_store_data.ix[i, 0]
+        while store_data[pos] > pre_data and pos > 0:
+            pos -= 1
+        while store_data[pos] < pre_data and pos < len(store_data) - 1:
+            pos += 1
+        store_data.append(-1)
+        for j in range(len(store_data) - 1, pos, -1):
+            store_data[j] = store_data[j - 1]
+        store_data[pos] = pre_data
+        move_steps += len(store_data) - 1 - pos
+    end_time = time.time()
+    average_move_steps = (move_steps * 1.0 / to_store_data.shape[0])
+    average_move_time = (end_time - start_time) * 1.0 / to_store_data.shape[0]
+    print("Average Move Steps: %f" % average_move_steps)
+    print("Average Move Time: %f" % average_move_time)
 
-    # print("************Without Optimization**************")
-    # store_data = train_set_x[:]
-    # move_steps = 0
-    # start_time = time.time()
-    # pos = 0
-    # for i in range(to_store_data.shape[0]):
-    #     pre_data = to_store_data.ix[i, 0]
-    #     while store_data[pos] > pre_data and pos > 0:
-    #         pos -= 1
-    #     while store_data[pos] < pre_data and pos < len(store_data) - 1:
-    #         pos += 1
-    #     store_data.append(-1)
-    #     for j in range(len(store_data) - 1, pos, -1):
-    #         store_data[j] = store_data[j - 1]
-    #     store_data[pos] = pre_data
-    #     move_steps += len(store_data) - 1 - pos
-    # end_time = time.time()
-    # average_move_steps = (move_steps * 1.0 / to_store_data.shape[0])
-    # average_move_time = (end_time - start_time) * 1.0 / to_store_data.shape[0]
-    # print("Average Move Steps: %f" % average_move_steps)
-    # print("Average Move Time: %f" % average_move_time)
+    result = [{"Average Moving Steps": average_move_steps, "Average Moving Time": average_move_time}]
 
-    # result = [{"Average Moving Steps": average_move_steps, "Average Moving Time": average_move_time}]
+    with open("store_performance/" + pathString[distribution] + "/no_optimization/"
+              + str(learning_percent) + ".json", "wb") as jsonFile:
+        json.dump(result, jsonFile)
 
-    # with open("store_performance/" + pathString[distribution] + "/no_optimization/" 
-    # + str(learning_percent) + ".json", "wb") as jsonFile:
-    #     json.dump(result, jsonFile)
+
+def show_help_message(msg):
+    help_message = {'command': 'python Learned_BTree.py -d <Distribution> [-p] [Percent] [-s] [Distance] [-h]',
+                    'distribution': 'Distribution: random, exponential',
+                    'percent': 'Percent: 0.1-1.0, default value = 0.5; train data size = 100,000',
+                    'distance': 'Random: 100-100,000, default = 1,000; '
+                                'Exponential: 100,000-100,000,000, default = 1,000,000',
+                    'noDistributionError': 'Please choose the distribution first.'}
+    help_message_key = ['command', 'distribution', 'percent', 'distance']
+    if msg == 'all':
+        for k in help_message_key:
+            print(help_message[k])
+
+    else:
+        print(help_message['command'])
+        print('Error! ' + help_message[msg])
+
+
+def main(argv):
+    distribution = None
+    per = 0.5
+    num = 100000
+    is_distribution = False
+    distance = 1000
+    try:
+        opts, args = getopt.getopt(argv, "hd:s:p:")
+    except getopt.GetoptError:
+        show_help_message('command')
+        sys.exit(2)
+    for opt, arg in opts:
+        arg = str(arg).lower()
+        if opt == '-h':
+            show_help_message('all')
+            return
+        elif opt == '-d':
+            if arg == "random":
+                distribution = Distribution.RANDOM
+                is_distribution = True
+                distance = 1000
+            elif arg == "exponential":
+                distribution = Distribution.EXPONENTIAL
+                is_distribution = True
+                distance = 1000000
+            else:
+                show_help_message('distribution')
+                return
+        elif opt == '-p':
+            if not is_distribution:
+                show_help_message('noDistributionError')
+                return
+            per = float(arg)
+            if not 0.1 <= per <= 1.0:
+                show_help_message('percent')
+                return
+
+        elif opt == '-s':
+            if not is_distribution:
+                show_help_message('noDistributionError')
+                return
+            distance = int(arg)
+            if distribution == Distribution.RANDOM:
+                if not 100 <= distance <= 100000:
+                    show_help_message('distance')
+                    return
+            else:
+                if not 100000 <= distance <= 100000000:
+                    show_help_message('distance')
+                    return
+        else:
+            print("Unknown parameters, please use -h for instructions.")
+            return
+
+    if not is_distribution:
+        show_help_message('noDistributionError')
+        return
+    create_data_hash(distribution, per, num)
+    if distribution == Distribution.RANDOM:
+        optimize_storage(1, distance, per, Distribution.RANDOM)
+    elif distribution == Distribution.EXPONENTIAL:
+        optimize_storage(1000, distance, per, Distribution.EXPONENTIAL)
 
 
 if __name__ == "__main__":
-    learning_percent = [0.3, 0.5, 0.8]
-    learning_ind = 2
-    # create_data_hash(Distribution.RANDOM, learning_percent[learning_ind])
-    data_distance = [100000, 1000000, 10000000, 100000000]
-    data_distance_random = [100, 1000, 10000, 100000]
-    distance_ind = 0
-    optimize_storage(1, data_distance_random[distance_ind], learning_percent[learning_ind], Distribution.RANDOM)
+    main(sys.argv[1:])
