@@ -3,7 +3,7 @@ import numpy as np
 import csv
 import random
 
-SIZE = 100001
+SIZE = 100000
 BLOCK_SIZE = 100
 
 
@@ -76,7 +76,7 @@ def create_data(distribution, data_size=SIZE):
                 i += 1
 
 
-def create_data_hash(distribution, data_size=SIZE):
+def create_data_hash(distribution, learning_percent=0.5, data_size=SIZE):
     if distribution == Distribution.RANDOM:
         data = random.sample(range(data_size * 2), data_size)
     elif distribution == Distribution.BINOMIAL:
@@ -93,41 +93,72 @@ def create_data_hash(distribution, data_size=SIZE):
     to_store_path = toStorePath[distribution]
     data.sort()
     store_bits = []
-    for i in range(data_size):
-        store_bits.append(random.randint(0, 1))
+    if learning_percent == 0.8:
+        for i in range(data_size):
+            store_bits.append(random.randint(0, 4))
+    else:
+        for i in range(data_size):
+            store_bits.append(random.randint(0, int(1.0 / learning_percent) - 1))
     i = 0
     with open(store_path, 'wb') as csvFile:
         csv_writer = csv.writer(csvFile)
         if distribution == Distribution.EXPONENTIAL:
-            for d in data:
-                din = int(d * 10000000)
+            if learning_percent == 0.8:
+                for ind in range(data_size):
+                    if store_bits[ind] != 0:
+                        din = int(data[ind] * 10000000)
+                        csv_writer.writerow([din, i / BLOCK_SIZE])
+                        i += 1
+            else:
+                for ind in range(data_size):
+                    if store_bits[ind] == 0:
+                        din = int(data[ind] * 10000000)
+                        csv_writer.writerow([din, i / BLOCK_SIZE])
+                        i += 1
         elif distribution == Distribution.LOGNORMAL:
             for d in data:
                 din = int(d * 10000)
         else:
-            for ind in range(data_size):
-                if store_bits[ind] == 1:
-                    din = int(data[ind])
-                    csv_writer.writerow([din, i / BLOCK_SIZE])
-                    i += 1
+            if learning_percent == 0.8:
+                for ind in range(data_size):
+                    if store_bits[ind] != 0:
+                        din = int(data[ind])
+                        csv_writer.writerow([din, i / BLOCK_SIZE])
+                        i += 1
+            else:
+                for ind in range(data_size):
+                    if store_bits[ind] == 0:
+                        din = int(data[ind])
+                        csv_writer.writerow([din, i / BLOCK_SIZE])
+                        i += 1
 
-    i = 0
     with open(to_store_path, 'wb') as csvFile:
         csv_writer = csv.writer(csvFile)
         if distribution == Distribution.EXPONENTIAL:
-            for d in data:
-                din = int(d * 10000000)
+            if learning_percent == 0.8:
+                for ind in range(data_size):
+                    if store_bits[ind] == 0:
+                        din = int(data[ind] * 10000000)
+                        csv_writer.writerow([din, i / BLOCK_SIZE])
+            else:
+                for ind in range(data_size):
+                    if store_bits[ind] != 0:
+                        din = int(data[ind] * 10000000)
+                        csv_writer.writerow([din])
         elif distribution == Distribution.LOGNORMAL:
             for d in data:
                 din = int(d * 10000)
         else:
+            if learning_percent == 0.8:
+                for ind in range(data_size):
+                    if store_bits[ind] == 0:
+                        din = int(data[ind])
+                        csv_writer.writerow([din, i / BLOCK_SIZE])
             for ind in range(data_size):
-                if store_bits[ind] == 1:
+                if store_bits[ind] != 0:
                     din = int(data[ind])
                     csv_writer.writerow([din])
-                    i += 1
-
 
 
 if __name__ == "__main__":
-    create_data_hash(Distribution.RANDOM)
+    create_data_hash(Distribution.EXPONENTIAL)
