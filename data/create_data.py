@@ -139,7 +139,7 @@ def create_data_hash(distribution, learning_percent=0.5, data_size=SIZE):
                 for ind in range(data_size):
                     if store_bits[ind] == 0:
                         din = int(data[ind] * 10000000)
-                        csv_writer.writerow([din, i / BLOCK_SIZE])
+                        csv_writer.writerow([din])
             else:
                 for ind in range(data_size):
                     if store_bits[ind] != 0:
@@ -153,11 +153,12 @@ def create_data_hash(distribution, learning_percent=0.5, data_size=SIZE):
                 for ind in range(data_size):
                     if store_bits[ind] == 0:
                         din = int(data[ind])
-                        csv_writer.writerow([din, i / BLOCK_SIZE])
-            for ind in range(data_size):
-                if store_bits[ind] != 0:
-                    din = int(data[ind])
-                    csv_writer.writerow([din])
+                        csv_writer.writerow([din])
+            else:
+                for ind in range(data_size):
+                    if store_bits[ind] != 0:
+                        din = int(data[ind])
+                        csv_writer.writerow([din])
 
 
 if __name__ == "__main__":

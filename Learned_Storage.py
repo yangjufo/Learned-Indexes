@@ -62,7 +62,7 @@ def hybrid_training(threshold, stage_nums, core_nums, train_step_nums, batch_siz
                 labels = tmp_labels[i][j]
                 test_labels = test_data_y
             if i == 0:
-                index[i][j] = TrainedNN(2, core_nums[i], train_step_nums[i], batch_size_nums[i], learning_rate_nums[i],
+                index[i][j] = TrainedNN(1, core_nums[i], train_step_nums[i], batch_size_nums[i], learning_rate_nums[i],
                                         keep_ratio_nums[i], inputs, labels, test_inputs, test_labels)
             else:
                 index[i][j] = TrainedNN(threshold, core_nums[i], train_step_nums[i], batch_size_nums[i],
@@ -281,7 +281,8 @@ def optimize_storage(threshold, data_part_distance, learning_percent, distributi
 if __name__ == "__main__":
     learning_percent = [0.3, 0.5, 0.8]
     learning_ind = 2
-    # create_data_hash(Distribution.EXPONENTIAL, learning_percent[learning_ind])
+    # create_data_hash(Distribution.RANDOM, learning_percent[learning_ind])
     data_distance = [100000, 1000000, 10000000, 100000000]
+    data_distance_random = [100, 1000, 10000, 100000]
     distance_ind = 0
-    optimize_storage(1000, data_distance[distance_ind], learning_percent[learning_ind], Distribution.EXPONENTIAL)
+    optimize_storage(1, data_distance_random[distance_ind], learning_percent[learning_ind], Distribution.RANDOM)
