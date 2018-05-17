@@ -1,6 +1,6 @@
 from __future__ import print_function
 import pandas as pd
-from Trained_NN import TrainedNN, ParameterPool, set_data_type
+from Trained_NN import TrainedNN, AbstractNN, ParameterPool, set_data_type
 from btree import BTree
 from data.create_data import create_data, Distribution
 import time, gc, json
@@ -16,8 +16,8 @@ filePath = {
     Distribution.EXPONENTIAL: "data/exponential.csv",
     Distribution.NORMAL: "data/normal.csv",
     Distribution.LOGNORMAL: "data/lognormal.csv"
-}
 
+}
 pathString = {
     Distribution.RANDOM: "Random",
     Distribution.BINOMIAL: "Binomial",
@@ -27,8 +27,17 @@ pathString = {
     Distribution.LOGNORMAL: "Lognormal"
 }
 
+thresholdPool = {
+    Distribution.RANDOM: [1, 1],    
+    Distribution.EXPONENTIAL: [25, 10000]
+}   
 
-def hybrid_training(threshold, stage_nums, core_nums, train_step_nums, batch_size_nums, learning_rate_nums,
+useThresholdPool = {
+    Distribution.RANDOM: [True, True],    
+    Distribution.EXPONENTIAL: [True, False],    
+}
+
+def hybrid_training(threshold, use_threshold, stage_nums, core_nums, train_step_nums, batch_size_nums, learning_rate_nums,
                     keep_ratio_nums, train_data_x, train_data_y, test_data_x, test_data_y):
     stage_length = len(stage_nums)
     col_num = stage_nums[1]
@@ -53,16 +62,14 @@ def hybrid_training(threshold, stage_nums, core_nums, train_step_nums, batch_siz
                     test_labels.append(int(k * divisor))
             else:
                 labels = tmp_labels[i][j]
-                test_labels = test_data_y
-            if i == 0:
-                index[i][j] = TrainedNN(1, core_nums[i], train_step_nums[i], batch_size_nums[i], learning_rate_nums[i],
-                                        keep_ratio_nums[i], inputs, labels, test_inputs, test_labels)
-            else:
-                index[i][j] = TrainedNN(threshold, core_nums[i], train_step_nums[i], batch_size_nums[i],
-                                        learning_rate_nums[i],
-                                        keep_ratio_nums[i], inputs, labels, test_inputs, test_labels)
-            index[i][j].train()
-
+                test_labels = test_data_y                        
+            tmp_index = TrainedNN(threshold[i], use_threshold[i], core_nums[i], train_step_nums[i], batch_size_nums[i],
+                                    learning_rate_nums[i],
+                                    keep_ratio_nums[i], inputs, labels, test_inputs, test_labels)            
+            tmp_index.train()            
+            index[i][j] = AbstractNN(tmp_index.get_weights(), tmp_index.get_bias(), core_nums[i], tmp_index.cal_err())
+            del tmp_index
+            gc.collect()
             if i < stage_length - 1:
                 for ind in range(len(tmp_inputs[i][j])):
                     p = index[i][j].predict(tmp_inputs[i][j][ind])
@@ -74,15 +81,15 @@ def hybrid_training(threshold, stage_nums, core_nums, train_step_nums, batch_siz
     for i in range(stage_nums[stage_length - 1]):
         if index[stage_length - 1][i] is None:
             continue
-        mean_abs_err = index[stage_length - 1][i].cal_err()
-        if mean_abs_err > threshold:
+        mean_abs_err = index[stage_length - 1][i].mean_err
+        if mean_abs_err > threshold[stage_length - 1]:
             print("Using BTree")
             index[stage_length - 1][i] = BTree(2)
             index[stage_length - 1][i].build(tmp_inputs[stage_length - 1][i], tmp_labels[stage_length - 1][i])
     return index
 
 
-def train_index(threshold, distribution, path):
+def train_index(threshold, use_threshold, distribution, path):
     data = pd.read_csv(path, header=None)
     train_set_x = []
     train_set_y = []
@@ -113,14 +120,14 @@ def train_index(threshold, distribution, path):
     for i in range(TOTAL_NUMBER):
         test_set_x.append(data.ix[i, 0])
         test_set_y.append(data.ix[i, 1])
-        train_set_x.append(data.ix[i, 0])
-        train_set_y.append(data.ix[i, 1])
+        #train_set_x.append(data.ix[i, 0])
+        #train_set_y.append(data.ix[i, 1])
 
     print("*************start Learned NN************")
     print("Start Train")
     start_time = time.time()
-    trained_index = hybrid_training(threshold, stage_set, core_set, train_step_set, batch_size_set, learning_rate_set,
-                                    keep_ratio_set, train_set_x, train_set_y, test_set_x, test_set_y)
+    trained_index = hybrid_training(threshold, use_threshold, stage_set, core_set, train_step_set, batch_size_set, learning_rate_set,
+                                    keep_ratio_set, test_set_x, test_set_y, [], [])
     end_time = time.time()
     learn_time = end_time - start_time
     print("Build Learned NN time ", learn_time)
@@ -139,7 +146,7 @@ def train_index(threshold, distribution, path):
     mean_error = err * 1.0 / len(test_set_x)
     print("mean error = ", mean_error)
     print("*************end Learned NN************\n\n")
-    result_stage1 = {0: {"weights": trained_index[0][0].get_weight(), "bias": trained_index[0][0].get_bias()}}
+    result_stage1 = {0: {"weights": trained_index[0][0].weights, "bias": trained_index[0][0].bias}}
     result_stage2 = {}
     for ind in range(len(trained_index[1])):
         if trained_index[1][ind] is None:
@@ -157,8 +164,8 @@ def train_index(threshold, distribution, path):
                 tmp_result.append(tmp)
             result_stage2[ind] = tmp_result;
         else:
-            result_stage2[ind] = {"weights": trained_index[1][ind].get_weight(),
-                                  "bias": trained_index[1][ind].get_bias()}
+            result_stage2[ind] = {"weights": trained_index[1][ind].weights,
+                                  "bias": trained_index[1][ind].weights}
     result = [{"stage": 1, "parameters": result_stage1}, {"stage": 2, "parameters": result_stage2}]
 
     with open("model/" + pathString[distribution] + "/full_train/NN/" + str(TOTAL_NUMBER) + ".json", "wb") as jsonFile:
@@ -188,6 +195,14 @@ def train_index(threshold, distribution, path):
     for ind in range(len(test_set_x)):
         pre = bt.predict(test_set_x[ind])
         err += abs(pre - test_set_y[ind])
+        if err != 0:
+            flag = 1
+            pos = pre
+            off = 1
+            while pos != test_set_y[ind]:
+                pos += flag * off
+                flag = -flag
+                off += 1            
     end_time = time.time()
     search_time = (end_time - start_time) / len(test_set_x)
     print("Search time ", search_time)
@@ -222,7 +237,7 @@ def train_index(threshold, distribution, path):
     gc.collect()
 
 
-def sample_train(threshold, distribution, training_percent, path):
+def sample_train(threshold, use_threshold, distribution, training_percent, path):
     data = pd.read_csv(path, header=None)
     train_set_x = []
     train_set_y = []
@@ -269,7 +284,7 @@ def sample_train(threshold, distribution, training_percent, path):
     print("*************start Learned NN************")
     print("Start Train")
     start_time = time.time()
-    trained_index = hybrid_training(threshold, stage_set, core_set, train_step_set, batch_size_set, learning_rate_set,
+    trained_index = hybrid_training(threshold, use_threshold, stage_set, core_set, train_step_set, batch_size_set, learning_rate_set,
                                     keep_ratio_set, train_set_x, train_set_y, test_set_x, test_set_y)
     end_time = time.time()
     learn_time = end_time - start_time
@@ -289,7 +304,7 @@ def sample_train(threshold, distribution, training_percent, path):
     mean_error = err * 1.0 / len(test_set_x)
     print("mean error = ", mean_error)
     print("*************end Learned NN************\n\n")
-    result_stage1 = {0: {"weights": trained_index[0][0].get_weight(), "bias": trained_index[0][0].get_bias()}}
+    result_stage1 = {0: {"weights": trained_index[0][0].weights, "bias": trained_index[0][0].bias}}
     result_stage2 = {}
     for ind in range(len(trained_index[1])):
         if trained_index[1][ind] is None:
@@ -307,8 +322,8 @@ def sample_train(threshold, distribution, training_percent, path):
                 tmp_result.append(tmp)
             result_stage2[ind] = tmp_result;
         else:
-            result_stage2[ind] = {"weights": trained_index[1][ind].get_weight(),
-                                  "bias": trained_index[1][ind].get_bias()}
+            result_stage2[ind] = {"weights": trained_index[1][ind].weights,
+                                  "bias": trained_index[1][ind].bias}
     result = [{"stage": 1, "parameters": result_stage1}, {"stage": 2, "parameters": result_stage2}]
 
     with open("model/" + pathString[distribution] + "/sample_train/NN/" + str(training_percent) + ".json",
@@ -424,12 +439,10 @@ def main(argv):
         show_help_message('noDistributionError')
         return
     create_data(distribution, num)
-    if is_sample:
-        threshold = 400
-        sample_train(threshold, distribution, per, filePath[distribution])
+    if is_sample:        
+        sample_train(thresholdPool[distribution], useThresholdPool[distribution], distribution, per, filePath[distribution])
     else:
-        threshold = 1
-        train_index(threshold, distribution, filePath[distribution])
+        train_index(thresholdPool[distribution], useThresholdPool[distribution], distribution, filePath[distribution])
 
 
 if __name__ == "__main__":

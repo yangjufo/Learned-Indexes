@@ -2,15 +2,28 @@ import tensorflow as tf
 import numpy as np
 from enum import Enum
 from data.create_data import Distribution
-
+from functools import wraps
 
 DATA_TYPE = Distribution.RANDOM
-
 
 def set_data_type(data_type):
     global DATA_TYPE
     DATA_TYPE = data_type
 
+
+def memoize(func):
+    memo = {}
+
+    @wraps(func)
+    def wrapper(*args):
+        if args in memo:
+            return memo[args]
+        else:
+            rv = func(*args)
+            memo[args] = rv
+            return rv
+
+    return wrapper
 
 class Parameter:
     def __init__(self, stages, cores, train_steps, batch_sizes, learning_rates, keep_ratios):
@@ -24,7 +37,7 @@ class Parameter:
 
 class ParameterPool(Enum):
     RANDOM = Parameter(stages=[1, 10], cores=[[1, 1], [1, 1]], train_steps=[20000, 20000],
-                       batch_sizes=[50, 50], learning_rates=[0.0001, 0.0001], keep_ratios=[0.9, 0.9])
+                       batch_sizes=[50, 50], learning_rates=[0.0001, 0.001], keep_ratios=[1.0, 1.0])
     LOGNORMAL = Parameter(stages=[1, 100], cores=[[1, 16, 16, 1], [1, 8, 1]], train_steps=[2000, 400],
                           batch_sizes=[100, 50], learning_rates=[0.0001, 0.001], keep_ratios=[1.0, 0.9])
     EXPONENTIAL = Parameter(stages=[1, 100], cores=[[1, 8, 1], [1, 8, 1]], train_steps=[30000, 20000],
@@ -55,12 +68,30 @@ def bias_variable(shape):
     initial = tf.constant(0.1, shape=shape)
     return tf.Variable(initial)
 
+class AbstractNN:
+    def __init__(self, weights, bias, core_nums, mean_err):
+        self.weights = weights
+        self.bias = bias        
+        self.core_nums = core_nums
+        self.mean_err = mean_err
+
+    @memoize
+    def predict(self, input_key):
+        tmp_res = np.mat(input_key) * np.mat(self.weights[0]) + np.mat(self.bias[0])
+        for i in range(1, len(self.core_nums) - 1):
+            tmp_res = np.mat(tmp_res) * np.mat(self.weights[i]) + np.mat(self.bias[i])
+        return int(round(tmp_res[0][0]))
+
+
+
 
 class TrainedNN:
-    def __init__(self, threshold, cores, train_step_num, batch_size, learning_rate, keep_ratio, train_x, train_y, test_x, test_y):
+    def __init__(self, threshold, useThreshold, cores, train_step_num, batch_size, learning_rate, keep_ratio, train_x, train_y,
+                 test_x, test_y):
         if cores is None:
             cores = []
         self.threshold_nums = threshold
+        self.useThreshold = useThreshold
         self.core_nums = cores
         self.train_step_nums = train_step_num
         self.batch_size = batch_size
@@ -83,7 +114,7 @@ class TrainedNN:
         self.h_fc = [None for i in range(len(self.core_nums))]
         self.h_fc_drop = [None for i in range(len(self.core_nums))]
         self.h_fc_drop[0] = tf.placeholder(tf.float32, shape=[None, self.core_nums[0]])
-        self.keep_prob = tf.placeholder(tf.float32)
+        self.keep_prob = tf.placeholder(tf.float32)        
 
     def next_batch(self):
         if self.batch * self.batch_size + self.batch_size < len(self.train_x):
@@ -103,65 +134,53 @@ class TrainedNN:
         self.cross_entropy = tf.reduce_mean(tf.losses.mean_squared_error(self.y_, self.h_fc[len(self.core_nums) - 2]))
         self.train_step = tf.train.AdamOptimizer(self.learning_rate).minimize(self.cross_entropy)
         self.sess.run(tf.global_variables_initializer())
-
+        
+        last_err = 0
+        err_count = 0
         for step in range(0, self.train_step_nums):
             self.sess.run(self.train_step,
                           feed_dict={self.h_fc_drop[0]: self.batch_x, self.y_: self.batch_y,
-                                     self.keep_prob: self.keep_ratio})
+                                     self.keep_prob: self.keep_ratio})            
 
-            tmp_w0 = self.sess.run(self.w_fc[0], feed_dict={self.h_fc_drop[0]: self.batch_x,
-                                                             self.y_: self.batch_y,
-                                                             self.keep_prob: 1.0})
-            # tmp_w1 = self.sess.run(self.w_fc[1], feed_dict={self.h_fc_drop[0]: self.batch_x,
-            #                                                 self.y_: self.batch_y,
-            #                                                 self.keep_prob: 1.0})
-            # tmp_w2 = self.sess.run(self.w_fc[2], feed_dict={self.h_fc_drop[0]: self.batch_x,
-            #                                                 self.y_: self.batch_y,
-            #                                                 self.keep_prob: 1.0})
-            # tmp_c = self.sess.run(self.cross_entropy, feed_dict={self.h_fc_drop[0]: self.batch_x,
-            #                                                      self.y_: self.batch_y,
-            #                                                      self.keep_prob: 1.0})
-            tmp_y = self.sess.run(self.h_fc[0], feed_dict={self.h_fc_drop[0]: self.batch_x,
-                                                            self.y_: self.batch_y,
-                                                            self.keep_prob: 1.0})
-
-            if step != 0 and step % 100 == 0:
+            if step % 100 == 0:
                 err = self.sess.run(self.cross_entropy, feed_dict={self.h_fc_drop[0]: np.array([self.train_x]).T,
                                                                    self.y_: np.array([self.train_y]).T,
                                                                    self.keep_prob: 1.0})
                 print("cross_entropy: %f" % err)
-                if err < self.threshold_nums:
-                    return
+                if step == 0:
+                    last_err = err  
+                if self.useThreshold:
+                    if err < self.threshold_nums:
+                        return
+                elif err > last_err:
+                    err_count += 1
+                    if err_count == 10:
+                        return
+                last_err = err
 
-            self.next_batch()
-
-    def predict(self, input_key):
-        result_pos = self.sess.run(self.h_fc[len(self.core_nums) - 2],
-                                   feed_dict={self.h_fc_drop[0]: np.array([[input_key]]).T, self.keep_prob: 1.0})
-        return int(round(result_pos[0]))
+            self.next_batch()    
 
     def cal_err(self):
         mean_err = self.sess.run(self.cross_entropy, feed_dict={self.h_fc_drop[0]: np.array([self.train_x]).T,
                                                                 self.y_: np.array([self.train_y]).T,
                                                                 self.keep_prob: 1.0})
         return mean_err
-
     def save(self, path):
         saver = tf.train.Saver()
         saver.save(self.sess, path)
 
-    def get_weight(self):
-        weight = []
+    def get_weights(self):
+        weights = []
         for i in range(len(self.core_nums) - 1):
-            weight.append(self.sess.run(self.w_fc[i], feed_dict={self.h_fc_drop[0]: np.array([self.train_x]).T,
-                                                                self.y_: np.array([self.train_y]).T,
-                                                                self.keep_prob: 1.0}).tolist())
-        return weight
+            weights.append(self.sess.run(self.w_fc[i], feed_dict={self.h_fc_drop[0]: np.array([self.train_x]).T,
+                                                                       self.y_: np.array([self.train_y]).T,
+                                                                       self.keep_prob: 1.0}).tolist())
+        return weights
 
     def get_bias(self):
         bias = []
         for i in range(len(self.core_nums) - 1):
             bias.append(self.sess.run(self.b_fc[i], feed_dict={self.h_fc_drop[0]: np.array([self.train_x]).T,
-                                                                 self.y_: np.array([self.train_y]).T,
-                                                                 self.keep_prob: 1.0}).tolist())
+                                                                    self.y_: np.array([self.train_y]).T,
+                                                                    self.keep_prob: 1.0}).tolist())
         return bias
