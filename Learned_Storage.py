@@ -1,8 +1,9 @@
 import pandas as pd
+import numpy as np
 from Trained_NN import TrainedNN, ParameterPool, set_data_type, AbstractNN
 from btree import BTree
-from data.create_data import create_data_hash, Distribution
-import time, json, math, getopt, sys, gc
+from data.create_data import create_data_storage, Distribution
+import time, json, math, getopt, sys, gc, csv
 
 STORE_NUMBER = 100001
 BLOCK_SIZE = 100
@@ -35,17 +36,54 @@ pathString = {
 }
 
 thresholdPool = {
-    Distribution.RANDOM: [1, 1],    
-    Distribution.EXPONENTIAL: [25, 10000]
-}   
-
-
-useThresholdPool = {
-    Distribution.RANDOM: [True, True],    
-    Distribution.EXPONENTIAL: [True, False],    
+    Distribution.RANDOM: [1, 1],
+    Distribution.EXPONENTIAL: [3, 10000]
 }
 
-def hybrid_training(threshold, use_threshold, stage_nums, core_nums, train_step_nums, batch_size_nums, learning_rate_nums,
+useThresholdPool = {
+    Distribution.RANDOM: [True, True],
+    Distribution.EXPONENTIAL: [True, False],
+}
+
+
+def part_binary_search(data_list, pos_list, key):
+    start = 0
+    end = len(pos_list) - 1
+    mid = 0
+    while start <= end:
+        mid = (start + end) / 2
+        if data_list[pos_list[mid]] < key:
+            start = mid + 1
+        elif data_list[pos_list[mid]] > key:
+            end = mid - 1
+        else:
+            return mid
+    if data_list[pos_list[mid]] > key and mid != 0:
+        return mid - 1
+    else:
+        return mid
+
+
+def pos_binary_search(data_list, key):
+    start = 0
+    end = len(data_list) - 1
+    mid = 0
+    while start <= end:
+        mid = (start + end) / 2
+        if data_list[mid] == key or data_list[mid] == -1:
+            return mid
+        elif data_list[mid] < key:
+            start = mid + 1
+        else:
+            end = mid - 1
+    if data_list[mid] > key and mid != 0:
+        return mid - 1
+    else:
+        return mid
+
+
+def hybrid_training(threshold, use_threshold, stage_nums, core_nums, train_step_nums, batch_size_nums,
+                    learning_rate_nums,
                     keep_ratio_nums, train_data_x, train_data_y, test_data_x, test_data_y):
     stage_length = len(stage_nums)
     col_num = stage_nums[1]
@@ -70,11 +108,11 @@ def hybrid_training(threshold, use_threshold, stage_nums, core_nums, train_step_
                     test_labels.append(int(k * divisor))
             else:
                 labels = tmp_labels[i][j]
-                test_labels = test_data_y           
+                test_labels = test_data_y
             tmp_index = TrainedNN(threshold[i], use_threshold[i], core_nums[i], train_step_nums[i], batch_size_nums[i],
-                                    learning_rate_nums[i],
-                                    keep_ratio_nums[i], inputs, labels, test_inputs, test_labels)            
-            tmp_index.train()            
+                                  learning_rate_nums[i],
+                                  keep_ratio_nums[i], inputs, labels, test_inputs, test_labels)
+            tmp_index.train()
             index[i][j] = AbstractNN(tmp_index.get_weights(), tmp_index.get_bias(), core_nums[i], tmp_index.cal_err())
             del tmp_index
             gc.collect()
@@ -120,7 +158,8 @@ def learn_density(threshold, use_threshold, distribution, train_set_x, train_set
     print("*************start Learned NN************")
     print("Start Train")
     start_time = time.time()
-    trained_index = hybrid_training(threshold, use_threshold, stage_set, core_set, train_step_set, batch_size_set, learning_rate_set,
+    trained_index = hybrid_training(threshold, use_threshold, stage_set, core_set, train_step_set, batch_size_set,
+                                    learning_rate_set,
                                     keep_ratio_set, train_set_x, train_set_y, test_set_x, test_set_y)
     end_time = time.time()
     learn_time = end_time - start_time
@@ -130,7 +169,7 @@ def learn_density(threshold, use_threshold, distribution, train_set_x, train_set
     return trained_index
 
 
-def optimize_storage(doCompare, threshold, use_threshold, data_part_distance, learning_percent, distribution):
+def optimize_storage(do_compare, threshold, use_threshold, data_part_distance, learning_percent, distribution):
     store_path = storePath[distribution]
     to_store_path = toStorePath[distribution]
 
@@ -149,16 +188,18 @@ def optimize_storage(doCompare, threshold, use_threshold, data_part_distance, le
     store_data = train_set_x[:]
 
     to_store_data = pd.read_csv(to_store_path, header=None)
+    trained_index = learn_density(threshold, use_threshold, distribution, train_set_x, train_set_y, test_set_x,
+                                  test_set_y)
     print("************Start Optimization**************")
-    trained_index = learn_density(threshold, use_threshold, distribution, train_set_x, train_set_y, test_set_x, test_set_y)
     stage_size = int(STORE_NUMBER / 10000)
     min_value = train_set_x[0]
     max_value = train_set_x[-1]
     data_density = []
-    data_density_block = [0]
+    data_density_pos = [0]
     data_part_num = int(math.ceil((max_value - min_value) * 1.0 / data_part_distance))
     last_pre = 0
-    store_block_num = int(math.ceil(len(store_data) * 1.0 / BLOCK_SIZE))
+    store_data_num = len(store_data)
+    store_block_num = int(math.ceil(store_data_num * 1.0 / BLOCK_SIZE))
     start_time = time.time()
     for i in range(1, data_part_num + 1):
         pre_data = min_value + i * data_part_distance
@@ -172,71 +213,67 @@ def optimize_storage(doCompare, threshold, use_threshold, data_part_distance, le
             pre2 = store_block_num
         if pre2 < last_pre:
             pre2 = last_pre
-        data_density_block.append(pre2)
+        data_density_pos.append(pre2 * BLOCK_SIZE)
         data_density.append(abs(pre2 - last_pre) * 1.0 / store_block_num)
         last_pre = pre2
 
-    move_steps = 0
     store_data = train_set_x[:]
-    total_block_num = int(math.ceil((to_store_data.shape[0] + len(train_set_x)) * 1.0 / BLOCK_SIZE))
-    for i in range(to_store_data.shape[0] + BLOCK_SIZE):
+    total_data_num = int(math.ceil(store_block_num * BLOCK_SIZE * (1.0 / learning_percent)))
+    for i in range(total_data_num - store_data_num):
         store_data.append(-1)
-    block_pos = total_block_num
-    data_optimization_block = []
+    block_pos = total_data_num - int(
+        math.ceil(total_data_num * (abs(store_block_num - last_pre) * 1.0 / store_block_num)))
+    data_optimization_pos = []
+    data_free_pos = []
     for i in range(data_part_num, 0, -1):
-        block_pos -= int(round(data_density[i - 1] * total_block_num))
-        data_optimization_block.insert(0, block_pos)
-        for j in range(data_density_block[i - 1], data_density_block[i] + 1):
-            old_block_pos = j * BLOCK_SIZE
-            if old_block_pos == 0:
-                break
-            new_block_pos = (block_pos + j - data_density_block[i - 1]) * BLOCK_SIZE
-            if old_block_pos >= new_block_pos:
-                continue
-            k = 0
-            for k in range(BLOCK_SIZE):
-                if store_data[old_block_pos + k] == -1:
-                    break
-                store_data[new_block_pos + k] = store_data[old_block_pos + k]
-                store_data[old_block_pos + k] = -1
-            move_steps += k
+        block_pos -= int(round(data_density[i - 1] * total_data_num))
+        if data_density[i - 1] == 0:
+            continue
+        if block_pos <= 0:
+            data_optimization_pos.insert(0, 0)
+            data_free_pos.insert(0, data_density_pos[i])
+            break
+        data_optimization_pos.insert(0, block_pos)
+        store_data[block_pos: block_pos + data_density_pos[i] - data_density_pos[i - 1]] = \
+            store_data[data_density_pos[i - 1]:data_density_pos[i]]
+        store_data[data_density_pos[i - 1]:data_density_pos[i]] = [-1] * (data_density_pos[i] - data_density_pos[i - 1])
+        data_free_pos.insert(0, block_pos + data_density_pos[i] - data_density_pos[i - 1])
     end_time = time.time()
     average_optimize_time = (end_time - start_time) * 1.0 / to_store_data.shape[0]
-    print("Average Optimize Time: %f" % average_optimize_time)
+    print("Average Optimize Time: %lf" % average_optimize_time)
 
+    std_deviation = np.std(data_density)
+    mean_density = np.mean(data_density)
+
+    print("Density Standard Deviation: %f" % std_deviation)
+    print("Mean Density: %f" % mean_density)
+
+    move_steps = len(train_set_x)
     print("************With Optimization**************")
-    pos = 0
-    ins_pos = 0
     start_time = time.time()
-    count = 0
     for i in range(to_store_data.shape[0]):
         pre_data = to_store_data.ix[i, 0]
-        if pre_data / data_part_distance == count:
-            count += 1
-            for j in range(data_part_num - 1):
-                pos = data_optimization_block[j] * BLOCK_SIZE
-                if store_data[pos] > pre_data:
-                    if j != 0:
-                        pos = data_optimization_block[j - 1] * BLOCK_SIZE
-                    else:
-                        pos = 0
-                    break
-        while (store_data[pos] > pre_data or store_data[pos] == -1) and pos > 0:
-            pos -= 1
-        while store_data[pos] <= pre_data and pos < len(store_data) - 1:
-            pos += 1
-        if ins_pos < pos:
-            ins_pos = pos
-        while store_data[ins_pos] != -1 and ins_pos < len(store_data) - 1:
+        part = part_binary_search(store_data, data_optimization_pos, pre_data)
+        pos = data_optimization_pos[part] + pos_binary_search(
+            store_data[data_optimization_pos[part]: data_free_pos[part]], pre_data)
+        ins_pos = data_free_pos[part]
+        while ins_pos < len(store_data) - 1 and store_data[ins_pos] != -1:
             ins_pos += 1
-        if ins_pos == len(store_data) - 1:
+        if ins_pos == len(store_data) - 1 and store_data[ins_pos] != -1:
             while store_data[ins_pos] != -1 and ins_pos > 0:
                 ins_pos -= 1
-            for j in range(ins_pos, pos):
-                store_data[j] = store_data[j + 1]
+            if ins_pos == 0 and store_data[ins_pos] != -1:
+                store_data.append(-1)
+                store_data.append(-1)
+                pos = len(store_data) - 1
+                ins_pos = pos + 1
+                data_free_pos[part] = ins_pos
+            else:
+                store_data[ins_pos:pos] = store_data[ins_pos + 1:pos + 1]
+                data_optimization_pos[part] = ins_pos
         else:
-            for j in range(ins_pos, pos, -1):
-                store_data[j] = store_data[j - 1]
+            store_data[pos + 1: ins_pos + 1] = store_data[pos:ins_pos]
+            data_free_pos[part] = ins_pos + 1
         store_data[pos] = pre_data
         move_steps += abs(ins_pos - pos)
     end_time = time.time()
@@ -247,27 +284,23 @@ def optimize_storage(doCompare, threshold, use_threshold, data_part_distance, le
     print("Average Move Time: %f" % average_move_time)
     print("Average Insert Time: %f" % average_insert_time)
     result = [{"Average Moving Steps": average_move_steps, "Average Moving Time": average_move_time,
-               "Average Optimizing Time": average_optimize_time, "average_insert_time": average_insert_time}]
+               "Average Optimizing Time": average_optimize_time, "Average Insert Time": average_insert_time,
+              " Mean Density": mean_density, "Density Standard Deviation": std_deviation}]
     with open("store_performance/" + pathString[distribution] + "/optimization/" + str(data_part_distance) + "_" + str(
             learning_percent) + ".json", "wb") as jsonFile:
         json.dump(result, jsonFile)
 
-    if not doCompare:
+    if not do_compare:
         return
     print("************Without Optimization**************")
     store_data = train_set_x[:]
     move_steps = 0
     start_time = time.time()
-    pos = 0
     for i in range(to_store_data.shape[0]):
         pre_data = to_store_data.ix[i, 0]
-        while store_data[pos] > pre_data and pos > 0:
-            pos -= 1
-        while store_data[pos] < pre_data and pos < len(store_data) - 1:
-            pos += 1
+        pos = pos_binary_search(store_data, pre_data)
         store_data.append(-1)
-        for j in range(len(store_data) - 1, pos, -1):
-            store_data[j] = store_data[j - 1]
+        store_data[pos + 1:len(store_data) - 1] = store_data[pos:len(store_data) - 2]
         store_data[pos] = pre_data
         move_steps += len(store_data) - 1 - pos
     end_time = time.time()
@@ -284,13 +317,16 @@ def optimize_storage(doCompare, threshold, use_threshold, data_part_distance, le
 
 
 def show_help_message(msg):
-    help_message = {'command': 'python Learned_BTree.py -d <Distribution> [-p] [Percent] [-s] [Distance] [-c] [Compare] [-h]',
-                    'distribution': 'Distribution: random, exponential',
-                    'percent': 'Percent: 0.1-1.0, default value = 0.5; train data size = 100,000',
-                    'distance': 'Random: 100-100,000, default = 1,000; '
-                                'Exponential: 100,000-100,000,000, default = 1,000,000',
-                    'compare': 'INTEGER, 0 for no comparing with no optimization, others for comparing',
-                    'noDistributionError': 'Please choose the distribution first.'}
+    help_message = {
+        'command': 'python Learned_BTree.py -d <Distribution> [-p] [Percent] [-s] [Distance] [-c] [Compare] [-n] [New data] [-h]',
+        'distribution': 'Distribution: random, exponential',
+        'percent': 'Percent: 0.1-1.0, default value = 0.5; train data size = 300,000',
+        'distance': 'Distance:'
+                    '[Random: 100-100,000, default = 1,000; '
+                    'Exponential: 100,000-100,000,000, default = 1,000,000]',
+        'compare': 'Compare: INTEGER, 0 for no comparing with no optimization, others for comparing',
+        'new data': 'New data: INTEGER, 0 for no creating new data file, others for creating',
+        'noDistributionError': 'Please choose the distribution first.'}
     help_message_key = ['command', 'distribution', 'percent', 'distance']
     if msg == 'all':
         for k in help_message_key:
@@ -307,8 +343,10 @@ def main(argv):
     num = 100000
     is_distribution = False
     distance = 1000
+    do_compare = True
+    do_create = True
     try:
-        opts, args = getopt.getopt(argv, "hd:s:p:c:")
+        opts, args = getopt.getopt(argv, "hd:s:p:c:n:")
     except getopt.GetoptError:
         show_help_message('command')
         sys.exit(2)
@@ -343,19 +381,21 @@ def main(argv):
                 show_help_message('noDistributionError')
                 return
             distance = int(arg)
-            if distribution == Distribution.RANDOM:
-                if not 100 <= distance <= 100000:
-                    show_help_message('distance')
-                    return
-            else:
-                if not 100000 <= distance <= 100000000:
-                    show_help_message('distance')
-                    return
+            if not 10 <= distance <= 100000000:
+                show_help_message('distance')
+                return
+
         elif opt == '-c':
             if not is_distribution:
                 show_help_message('noDistributionError')
                 return
-            doCompare = int(arg) == 1
+            do_compare = not (int(arg) == 0)
+
+        elif opt == '-n':
+            if not is_distribution:
+                show_help_message('noDistributionError')
+                return
+            do_create = not (int(arg) == 0)
 
         else:
             print("Unknown parameters, please use -h for instructions.")
@@ -364,8 +404,10 @@ def main(argv):
     if not is_distribution:
         show_help_message('noDistributionError')
         return
-    create_data_hash(distribution, per, num)
-    optimize_storage(doCompare, thresholdPool[distribution], useThresholdPool[distribution], distance, per, distribution)
+    if do_create:
+        create_data_storage(distribution, per, num)
+    optimize_storage(do_compare, thresholdPool[distribution], useThresholdPool[distribution], distance, per,
+                     distribution)
 
 
 if __name__ == "__main__":

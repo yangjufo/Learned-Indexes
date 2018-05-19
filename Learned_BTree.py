@@ -342,11 +342,12 @@ def sample_train(threshold, use_threshold, distribution, training_percent, path)
 
 
 def show_help_message(msg):
-    help_message = {'command': 'python Learned_BTree.py -t <Type> -d <Distribution> [-p|-n] [Percent]|[Number] [-h]',
+    help_message = {'command': 'python Learned_BTree.py -t <Type> -d <Distribution> [-p|-n] [Percent]|[Number] [-c] [New data] [-h]',
                     'type': 'Type: sample, full',
                     'distribution': 'Distribution: random, exponential',
                     'percent': 'Percent: 0.1-1.0, default value = 0.5; train data size = 300,000',
                     'number': 'Number: 10,000-1,000,000, default value = 300,000',
+                    'new data' 'New Data: INTEGER, 0 for no creating new data file, others for creating'
                     'fpError': 'Percent cannot be assigned in full train.',
                     'snError': 'Number cannot be assigned in sample train.',
                     'noTypeError': 'Please choose the type first.',
@@ -368,8 +369,9 @@ def main(argv):
     is_sample = False
     is_type = False
     is_distribution = False
+    do_create = True
     try:
-        opts, args = getopt.getopt(argv, "hd:t:p:n:")
+        opts, args = getopt.getopt(argv, "hd:t:p:n:c:")
     except getopt.GetoptError:
         show_help_message('command')
         sys.exit(2)
@@ -428,6 +430,12 @@ def main(argv):
                 show_help_message('number')
                 return
 
+        elif opt == '-c':
+            if not is_distribution:
+                show_help_message('noDistributionError')
+                return
+            do_create = not (int(arg) == 0)
+
         else:
             print("Unknown parameters, please use -h for instructions.")
             return
@@ -438,7 +446,8 @@ def main(argv):
     if not is_distribution:
         show_help_message('noDistributionError')
         return
-    create_data(distribution, num)
+    if do_create:
+        create_data(distribution, num)
     if is_sample:        
         sample_train(thresholdPool[distribution], useThresholdPool[distribution], distribution, per, filePath[distribution])
     else:
