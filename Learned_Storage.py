@@ -37,7 +37,7 @@ pathString = {
 
 thresholdPool = {
     Distribution.RANDOM: [1, 1],
-    Distribution.EXPONENTIAL: [2, 10000]
+    Distribution.EXPONENTIAL: [1, 10000]
 }
 
 useThresholdPool = {
@@ -169,7 +169,7 @@ def learn_density(threshold, use_threshold, distribution, train_set_x, train_set
     return trained_index
 
 
-def optimize_storage(do_compare, threshold, use_threshold, data_part_distance, learning_percent, distribution):
+def optimize_storage(do_compare, do_record, threshold, use_threshold, data_part_distance, learning_percent, distribution):
     store_path = storePath[distribution]
     to_store_path = toStorePath[distribution]
 
@@ -211,16 +211,16 @@ def optimize_storage(do_compare, threshold, use_threshold, data_part_distance, l
             pre2 = trained_index[1][pre1].predict(pre_data)
             if pre2 > store_block_num:
                 pre2 = store_block_num
-            if pre2 < last_pre:
-                pre2 = last_pre
+            if pre2 <= last_pre:
+                continue
             if pre2 >= store_block_num - 1:
-                data_part_num = i
                 break
             data_density_pos.append(pre2 * BLOCK_SIZE)
             data_density.append(abs(pre2 - last_pre) * 1.0 / store_block_num)
             last_pre = pre2
         data_density_pos.append(store_data_num)
         data_density.append(abs(store_block_num - 1 - last_pre) * 1.0 / store_block_num)
+        data_part_num = len(data_density)
 
         store_data = train_set_x[:]
         total_data_num = int(math.ceil(store_block_num * BLOCK_SIZE * (1.0 / learning_percent)))
@@ -233,8 +233,6 @@ def optimize_storage(do_compare, threshold, use_threshold, data_part_distance, l
 
         for i in range(data_part_num, 0, -1):
             block_pos -= int(round(data_density[i - 1] * total_data_num))
-            if data_density[i - 1] == 0:
-                continue
             if block_pos <= 0:
                 data_optimization_pos.insert(0, 0)
                 data_free_pos.insert(0, data_density_pos[i])
@@ -242,7 +240,10 @@ def optimize_storage(do_compare, threshold, use_threshold, data_part_distance, l
             data_optimization_pos.insert(0, block_pos)
             store_data[block_pos: block_pos + data_density_pos[i] - data_density_pos[i - 1]] = \
                 store_data[data_density_pos[i - 1]:data_density_pos[i]]
-            store_data[data_density_pos[i - 1]:data_density_pos[i]] = [-1] * (
+            if block_pos < data_density_pos[i]:
+                store_data[data_density_pos[i - 1]:block_pos] = [-1] * (block_pos - data_density_pos[i - 1])
+            else:
+                store_data[data_density_pos[i - 1]:data_density_pos[i]] = [-1] * (
                         data_density_pos[i] - data_density_pos[i - 1])
             data_free_pos.insert(0, block_pos + data_density_pos[i] - data_density_pos[i - 1])
         end_time = time.time()
@@ -255,6 +256,12 @@ def optimize_storage(do_compare, threshold, use_threshold, data_part_distance, l
 
         print("Density Standard Deviation: %f" % std_deviation)
         print("Mean Density: %f" % mean_density)
+
+        if do_record:
+            with open('optimization_result.csv', 'wb') as csvFile:
+                csv_writer = csv.writer(csvFile)
+                for i in store_data:
+                    csv_writer.writerow([i])
 
         move_steps = len(train_set_x)
         print("************With Optimization**************")
@@ -272,7 +279,7 @@ def optimize_storage(do_compare, threshold, use_threshold, data_part_distance, l
             store_data[pos + 2: ins_pos + 1] = store_data[pos + 1:ins_pos]
             data_free_pos[part] = ins_pos + 1
             store_data[pos + 1] = pre_data
-            move_steps += abs(ins_pos - pos)
+            move_steps += ins_pos - pos
         end_time = time.time()
         average_move_steps = (move_steps * 1.0 / to_store_data.shape[0])
         average_move_time = (end_time - start_time) * 1.0 / to_store_data.shape[0]
@@ -282,11 +289,16 @@ def optimize_storage(do_compare, threshold, use_threshold, data_part_distance, l
         print("Average Insert Time: %f" % average_insert_time)
         result = [{"Average Moving Steps": average_move_steps, "Average Moving Time": average_move_time,
                    "Average Optimizing Time": average_optimize_time, "Average Insert Time": average_insert_time,
-                   " Mean Density": mean_density, "Density Standard Deviation": std_deviation}]
+                   "Mean Density": mean_density, "Density Standard Deviation": std_deviation}]
         with open("store_performance/" + pathString[distribution] + "/optimization/" + str(
-                data_part_distance) + "_" + str(
-                learning_percent) + ".json", "wb") as jsonFile:
+                data_part_distance) + "_" + str(learning_percent) + ".json", "wb") as jsonFile:
             json.dump(result, jsonFile)
+
+        if do_record:
+            with open('insert_result.csv', 'wb') as csvFile:
+                csv_writer = csv.writer(csvFile)
+                for i in store_data:
+                    csv_writer.writerow([i])
 
     if do_compare == 0 or do_compare == 2:
         print("************Without Optimization**************")
@@ -316,7 +328,7 @@ def optimize_storage(do_compare, threshold, use_threshold, data_part_distance, l
 def show_help_message(msg):
     help_message = {
         'command': 'python Learned_BTree.py -d <Distribution> [-p] [Percent] '
-                   '[-s] [Distance] [-c] [Compare] [-n] [New data] [-h]',
+                   '[-s] [Distance] [-c] [Compare] [-n] [New data] [-r] [Record] [-h]',
         'distribution': 'Distribution: random, exponential',
         'percent': 'Percent: 0.1-1.0, default value = 0.5; train data size = 300,000',
         'distance': 'Distance:'
@@ -324,6 +336,7 @@ def show_help_message(msg):
                     'Exponential: 100,000-100,000,000, default = 1,000,000]',
         'compare': 'Compare: INTEGER, 2 for comparing, 1 for only optimization, 0 for only no optimization',
         'new data': 'New data: INTEGER, 0 for no creating new data file, others for creating',
+        'record': 'Record: INTEGER, 0 for no printing out result, others for printing',
         'noDistributionError': 'Please choose the distribution first.'}
     help_message_key = ['command', 'distribution', 'percent', 'distance']
     if msg == 'all':
@@ -343,8 +356,9 @@ def main(argv):
     distance = 1000
     do_compare = 2
     do_create = True
+    do_record = True
     try:
-        opts, args = getopt.getopt(argv, "hd:s:p:c:n:")
+        opts, [] = getopt.getopt(argv, "hd:s:p:c:n:r:")
     except getopt.GetoptError:
         show_help_message('command')
         sys.exit(2)
@@ -396,6 +410,13 @@ def main(argv):
                 show_help_message('noDistributionError')
                 return
             do_create = not (int(arg) == 0)
+        
+        elif opt == '-r':
+            if not is_distribution:
+                show_help_message('noDistributionError')
+                return
+            do_record = not (int(arg) == 0)
+
 
         else:
             print("Unknown parameters, please use -h for instructions.")
@@ -406,7 +427,7 @@ def main(argv):
         return
     if do_create:
         create_data_storage(distribution, per, num)
-    optimize_storage(do_compare, thresholdPool[distribution], useThresholdPool[distribution], distance, per,
+    optimize_storage(do_compare, do_record, thresholdPool[distribution], useThresholdPool[distribution], distance, per,
                      distribution)
 
 

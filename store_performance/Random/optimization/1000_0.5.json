@@ -1,1 +1,10 @@
-[{" Mean Density": 0.00499001996007984, "Average Insert Time": 3.892408409336243e-05, "Average Moving Time": 3.851958131403653e-05, "Density Standard Deviation": 0.001017768365986584, "Average Optimizing Time": 4.0450277932589923e-07, "Average Moving Steps": 468.00012008405884}]
+[
+  {
+    " Mean Density": 0.0049900000000000005,
+    "Average Insert Time": 4.739165318000566e-05,
+    "Average Moving Time": 4.704751373683087e-05,
+    "Density Standard Deviation": 0.0010391823709051265,
+    "Average Optimizing Time": 3.441394431747903e-07,
+    "Average Moving Steps": 552.5466043277588
+  }
+]
