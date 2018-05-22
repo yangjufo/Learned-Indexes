@@ -330,15 +330,15 @@ def show_help_message(msg):
         'command': 'python Learned_BTree.py -d <Distribution> [-p] [Percent] '
                    '[-s] [Distance] [-c] [Compare] [-n] [New data] [-r] [Record] [-h]',
         'distribution': 'Distribution: random, exponential',
-        'percent': 'Percent: 0.1-1.0, default value = 0.5; train data size = 300,000',
+        'percent': 'Percent: 0.1-1.0, default value = 0.5; train data size = 100,000',
         'distance': 'Distance:'
                     '[Random: 100-100,000, default = 1,000; '
                     'Exponential: 100,000-100,000,000, default = 1,000,000]',
-        'compare': 'Compare: INTEGER, 2 for comparing, 1 for only optimization, 0 for only no optimization',
-        'new data': 'New data: INTEGER, 0 for no creating new data file, others for creating',
-        'record': 'Record: INTEGER, 0 for no printing out result, others for printing',
+        'compare': 'Compare: INTEGER, 2 for comparing, 1 for only optimization, 0 for only no optimization, default = 2',
+        'new data': 'New data: INTEGER, 0 for no creating new data file, others for creating, default = 1',
+        'record': 'Record: INTEGER, 0 for no printing out result, others for printing, default = 0',
         'noDistributionError': 'Please choose the distribution first.'}
-    help_message_key = ['command', 'distribution', 'percent', 'distance']
+    help_message_key = ['command', 'distribution', 'percent', 'distance', 'compare', 'new data', 'record']
     if msg == 'all':
         for k in help_message_key:
             print(help_message[k])
@@ -356,7 +356,7 @@ def main(argv):
     distance = 1000
     do_compare = 2
     do_create = True
-    do_record = True
+    do_record = False
     try:
         opts, [] = getopt.getopt(argv, "hd:s:p:c:n:r:")
     except getopt.GetoptError:

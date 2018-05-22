@@ -345,14 +345,14 @@ def show_help_message(msg):
     help_message = {'command': 'python Learned_BTree.py -t <Type> -d <Distribution> [-p|-n] [Percent]|[Number] [-c] [New data] [-h]',
                     'type': 'Type: sample, full',
                     'distribution': 'Distribution: random, exponential',
-                    'percent': 'Percent: 0.1-1.0, default value = 0.5; train data size = 300,000',
+                    'percent': 'Percent: 0.1-1.0, default value = 0.5; sample train data size = 300,000',
                     'number': 'Number: 10,000-1,000,000, default value = 300,000',
-                    'new data' 'New Data: INTEGER, 0 for no creating new data file, others for creating'
+                    'new data' 'New Data: INTEGER, 0 for no creating new data file, others for creating, default = 1'
                     'fpError': 'Percent cannot be assigned in full train.',
                     'snError': 'Number cannot be assigned in sample train.',
                     'noTypeError': 'Please choose the type first.',
                     'noDistributionError': 'Please choose the distribution first.'}
-    help_message_key = ['command', 'type', 'distribution', 'percent', 'number']
+    help_message_key = ['command', 'type', 'distribution', 'percent', 'number', 'new data']
     if msg == 'all':
         for k in help_message_key:
             print(help_message[k])
