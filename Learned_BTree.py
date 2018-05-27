@@ -28,12 +28,12 @@ pathString = {
 }
 
 thresholdPool = {
-    Distribution.RANDOM: [1, 1],    
-    Distribution.EXPONENTIAL: [25, 10000]
+    Distribution.RANDOM: [1, 4],    
+    Distribution.EXPONENTIAL: [55, 10000]
 }   
 
 useThresholdPool = {
-    Distribution.RANDOM: [True, True],    
+    Distribution.RANDOM: [True, False],    
     Distribution.EXPONENTIAL: [True, False],    
 }
 
@@ -90,6 +90,8 @@ def hybrid_training(threshold, use_threshold, stage_nums, core_nums, train_step_
 
 
 def train_index(threshold, use_threshold, distribution, path):
+    # data = pd.read_csv("data/random_t.csv", header=None)
+    # data = pd.read_csv("data/exponential_t.csv", header=None)
     data = pd.read_csv(path, header=None)
     train_set_x = []
     train_set_y = []
@@ -108,7 +110,7 @@ def train_index(threshold, use_threshold, distribution, path):
     else:
         return
     stage_set = parameter.stage_set
-    stage_set[1] = int(data.shape[0] / 10000)
+    stage_set[1] = int(round(data.shape[0] / 10000))
     core_set = parameter.core_set
     train_step_set = parameter.train_step_set
     batch_size_set = parameter.batch_size_set
@@ -117,17 +119,25 @@ def train_index(threshold, use_threshold, distribution, path):
 
     global TOTAL_NUMBER
     TOTAL_NUMBER = data.shape[0]
-    for i in range(TOTAL_NUMBER):
-        test_set_x.append(data.ix[i, 0])
-        test_set_y.append(data.ix[i, 1])
+    for i in range(data.shape[0]):
+        train_set_x.append(data.ix[i, 0])
+        train_set_y.append(data.ix[i, 1])
         #train_set_x.append(data.ix[i, 0])
         #train_set_y.append(data.ix[i, 1])
+
+    test_set_x = train_set_x[:]
+    test_set_y = train_set_y[:]     
+    # data = pd.read_csv("data/random_t.csv", header=None)
+    # data = pd.read_csv("data/exponential_t.csv", header=None)
+    # for i in range(data.shape[0]):
+    #     test_set_x.append(data.ix[i, 0])
+    #     test_set_y.append(data.ix[i, 1])
 
     print("*************start Learned NN************")
     print("Start Train")
     start_time = time.time()
     trained_index = hybrid_training(threshold, use_threshold, stage_set, core_set, train_step_set, batch_size_set, learning_rate_set,
-                                    keep_ratio_set, test_set_x, test_set_y, [], [])
+                                    keep_ratio_set, train_set_x, train_set_y, [], [])
     end_time = time.time()
     learn_time = end_time - start_time
     print("Build Learned NN time ", learn_time)
@@ -162,7 +172,7 @@ def train_index(threshold, use_threshold, distribution, path):
                 tmp = {"index": node.index, "isLeaf": node.isLeaf, "children": node.children, "items": item,
                        "numberOfkeys": node.numberOfKeys}
                 tmp_result.append(tmp)
-            result_stage2[ind] = tmp_result;
+            result_stage2[ind] = tmp_result
         else:
             result_stage2[ind] = {"weights": trained_index[1][ind].weights,
                                   "bias": trained_index[1][ind].weights}
@@ -180,7 +190,7 @@ def train_index(threshold, use_threshold, distribution, path):
 
     del trained_index
     gc.collect()
-
+    
     print("*************start BTree************")
     bt = BTree(2)
     print("Start Build")
@@ -320,7 +330,7 @@ def sample_train(threshold, use_threshold, distribution, training_percent, path)
                 tmp = {"index": node.index, "isLeaf": node.isLeaf, "children": node.children, "items": item,
                        "numberOfkeys": node.numberOfKeys}
                 tmp_result.append(tmp)
-            result_stage2[ind] = tmp_result;
+            result_stage2[ind] = tmp_result
         else:
             result_stage2[ind] = {"weights": trained_index[1][ind].weights,
                                   "bias": trained_index[1][ind].bias}
@@ -347,7 +357,7 @@ def show_help_message(msg):
                     'distribution': 'Distribution: random, exponential',
                     'percent': 'Percent: 0.1-1.0, default value = 0.5; sample train data size = 300,000',
                     'number': 'Number: 10,000-1,000,000, default value = 300,000',
-                    'new data' 'New Data: INTEGER, 0 for no creating new data file, others for creating, default = 1'
+                    'new data': 'New Data: INTEGER, 0 for no creating new data file, others for creating, default = 1',
                     'fpError': 'Percent cannot be assigned in full train.',
                     'snError': 'Number cannot be assigned in sample train.',
                     'noTypeError': 'Please choose the type first.',
