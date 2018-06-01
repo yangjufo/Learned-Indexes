@@ -1,3 +1,4 @@
+# Main file for create test data
 from enum import Enum
 import numpy as np
 import csv
@@ -15,7 +16,7 @@ class Distribution(Enum):
     NORMAL = 4
     LOGNORMAL = 5
 
-
+# store path
 filePath = {
     Distribution.RANDOM: "data/random.csv",
     Distribution.BINOMIAL: "data/binomial.csv",
@@ -25,6 +26,7 @@ filePath = {
     Distribution.LOGNORMAL: "data/lognormal.csv"
 }
 
+# path for storage optimization
 storePath = {
     Distribution.RANDOM: "data/random_s.csv",
     Distribution.BINOMIAL: "data/binomial_s.csv",
@@ -43,7 +45,7 @@ toStorePath = {
     Distribution.LOGNORMAL: "data/lognormal_t.csv"
 }
 
-
+# create data
 def create_data(distribution, data_size=SIZE):
     if distribution == Distribution.RANDOM:
         data = random.sample(range(data_size * 2), data_size)
@@ -103,6 +105,7 @@ def create_data_storage(distribution, learning_percent=0.5, data_size=SIZE):
     insert_data = []
     with open(store_path, 'wb') as csvFile:
         csv_writer = csv.writer(csvFile)
+        #deal with sample training and storage optimization
         if distribution == Distribution.EXPONENTIAL:
             if learning_percent == 0.8:
                 for ind in range(data_size):

@@ -1,6 +1,8 @@
+# BTree Index with Python
+
 import pandas as pd
 
-
+# Node in BTree
 class BTreeNode:
     def __init__(self, degree=2, number_of_keys=0, is_leaf=True, items=None, children=None,
                  index=None):
@@ -33,7 +35,7 @@ class BTreeNode:
         else:
             return b_tree.get_node(self.children[i]).search(b_tree, an_item)
 
-
+# BTree Class
 class BTree:
     def __init__(self, degree=2, nodes=None, root_index=1, free_index=2):
         if nodes is None:
@@ -241,7 +243,7 @@ class BTree:
     def write_at(self, index, a_node):
         self.nodes[index] = a_node
 
-
+# Value in Node
 class Item():
     def __init__(self, k, v):
         self.k = k
@@ -277,7 +279,7 @@ class Item():
         else:
             return False
 
-
+# For Test
 def b_tree_main():
     path = "last_data.csv"
     data = pd.read_csv(path)

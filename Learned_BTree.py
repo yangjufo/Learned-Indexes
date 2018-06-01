@@ -1,3 +1,5 @@
+# Main File for Learned Index
+
 from __future__ import print_function
 import pandas as pd
 from Trained_NN import TrainedNN, AbstractNN, ParameterPool, set_data_type
@@ -6,9 +8,11 @@ from data.create_data import create_data, Distribution
 import time, gc, json
 import os, sys, getopt
 
+# Setting 
 BLOCK_SIZE = 100
 TOTAL_NUMBER = 300000
 
+# data files
 filePath = {
     Distribution.RANDOM: "data/random.csv",
     Distribution.BINOMIAL: "data/binomial.csv",
@@ -18,6 +22,8 @@ filePath = {
     Distribution.LOGNORMAL: "data/lognormal.csv"
 
 }
+
+# result record path
 pathString = {
     Distribution.RANDOM: "Random",
     Distribution.BINOMIAL: "Binomial",
@@ -27,20 +33,24 @@ pathString = {
     Distribution.LOGNORMAL: "Lognormal"
 }
 
+# threshold for train (judge whether stop train and replace with BTree)
 thresholdPool = {
     Distribution.RANDOM: [1, 4],    
     Distribution.EXPONENTIAL: [55, 10000]
 }   
 
+# whether use threshold to stop train for models in stages
 useThresholdPool = {
     Distribution.RANDOM: [True, False],    
     Distribution.EXPONENTIAL: [True, False],    
 }
 
+# hybrid training structure, 2 stages
 def hybrid_training(threshold, use_threshold, stage_nums, core_nums, train_step_nums, batch_size_nums, learning_rate_nums,
                     keep_ratio_nums, train_data_x, train_data_y, test_data_x, test_data_y):
     stage_length = len(stage_nums)
     col_num = stage_nums[1]
+    # initial
     tmp_inputs = [[[] for i in range(col_num)] for i in range(stage_length)]
     tmp_labels = [[[] for i in range(col_num)] for i in range(stage_length)]
     index = [[None for i in range(col_num)] for i in range(stage_length)]
@@ -55,6 +65,7 @@ def hybrid_training(threshold, use_threshold, stage_nums, core_nums, train_step_
             labels = []
             test_labels = []
             if i == 0:
+                # first stage, calculate how many models in next stage
                 divisor = stage_nums[i + 1] * 1.0 / (TOTAL_NUMBER / BLOCK_SIZE)
                 for k in tmp_labels[i][j]:
                     labels.append(int(k * divisor))
@@ -62,17 +73,21 @@ def hybrid_training(threshold, use_threshold, stage_nums, core_nums, train_step_
                     test_labels.append(int(k * divisor))
             else:
                 labels = tmp_labels[i][j]
-                test_labels = test_data_y                        
+                test_labels = test_data_y    
+            # train model                    
             tmp_index = TrainedNN(threshold[i], use_threshold[i], core_nums[i], train_step_nums[i], batch_size_nums[i],
                                     learning_rate_nums[i],
                                     keep_ratio_nums[i], inputs, labels, test_inputs, test_labels)            
-            tmp_index.train()            
+            tmp_index.train()      
+            # get parameters in model (weight matrix and bias matrix)      
             index[i][j] = AbstractNN(tmp_index.get_weights(), tmp_index.get_bias(), core_nums[i], tmp_index.cal_err())
             del tmp_index
             gc.collect()
             if i < stage_length - 1:
+                # allocate data into training set for models in next stage
                 for ind in range(len(tmp_inputs[i][j])):
-                    p = index[i][j].predict(tmp_inputs[i][j][ind])
+                    # pick model in next stage with output of this model
+                    p = index[i][j].predict(tmp_inputs[i][j][ind])                    
                     if p > stage_nums[i + 1] - 1:
                         p = stage_nums[i + 1] - 1
                     tmp_inputs[i + 1][p].append(tmp_inputs[i][j][ind])
@@ -83,12 +98,13 @@ def hybrid_training(threshold, use_threshold, stage_nums, core_nums, train_step_
             continue
         mean_abs_err = index[stage_length - 1][i].mean_err
         if mean_abs_err > threshold[stage_length - 1]:
+            # replace model with BTree if mean error > threshold
             print("Using BTree")
             index[stage_length - 1][i] = BTree(2)
             index[stage_length - 1][i].build(tmp_inputs[stage_length - 1][i], tmp_labels[stage_length - 1][i])
     return index
 
-
+# main function for training idnex
 def train_index(threshold, use_threshold, distribution, path):
     # data = pd.read_csv("data/random_t.csv", header=None)
     # data = pd.read_csv("data/exponential_t.csv", header=None)
@@ -99,6 +115,7 @@ def train_index(threshold, use_threshold, distribution, path):
     test_set_y = []
 
     set_data_type(distribution)
+    # read parameter
     if distribution == Distribution.RANDOM:
         parameter = ParameterPool.RANDOM.value
     elif distribution == Distribution.LOGNORMAL:
@@ -110,6 +127,7 @@ def train_index(threshold, use_threshold, distribution, path):
     else:
         return
     stage_set = parameter.stage_set
+    # set number of models for second stage (1 model deal with 10000 records)
     stage_set[1] = int(round(data.shape[0] / 10000))
     core_set = parameter.core_set
     train_step_set = parameter.train_step_set
@@ -136,6 +154,7 @@ def train_index(threshold, use_threshold, distribution, path):
     print("*************start Learned NN************")
     print("Start Train")
     start_time = time.time()
+    # train index
     trained_index = hybrid_training(threshold, use_threshold, stage_set, core_set, train_step_set, batch_size_set, learning_rate_set,
                                     keep_ratio_set, train_set_x, train_set_y, [], [])
     end_time = time.time()
@@ -144,10 +163,13 @@ def train_index(threshold, use_threshold, distribution, path):
     print("Calculate Error")
     err = 0
     start_time = time.time()
+    # calculate error
     for ind in range(len(test_set_x)):
+        # pick model in next stage
         pre1 = trained_index[0][0].predict(test_set_x[ind])
         if pre1 > stage_set[1] - 1:
             pre1 = stage_set[1] - 1
+        # predict position
         pre2 = trained_index[1][pre1].predict(test_set_x[ind])
         err += abs(pre2 - test_set_y[ind])
     end_time = time.time()
@@ -156,6 +178,7 @@ def train_index(threshold, use_threshold, distribution, path):
     mean_error = err * 1.0 / len(test_set_x)
     print("mean error = ", mean_error)
     print("*************end Learned NN************\n\n")
+    # write parameter into files
     result_stage1 = {0: {"weights": trained_index[0][0].weights, "bias": trained_index[0][0].bias}}
     result_stage2 = {}
     for ind in range(len(trained_index[1])):
@@ -181,6 +204,7 @@ def train_index(threshold, use_threshold, distribution, path):
     with open("model/" + pathString[distribution] + "/full_train/NN/" + str(TOTAL_NUMBER) + ".json", "wb") as jsonFile:
         json.dump(result, jsonFile)
 
+    # wirte performance into files
     performance_NN = {"type": "NN", "build time": learn_time, "search time": search_time, "average error": mean_error,
                       "store size": os.path.getsize(
                           "model/" + pathString[distribution] + "/full_train/NN/" + str(TOTAL_NUMBER) + ".json")}
@@ -191,6 +215,7 @@ def train_index(threshold, use_threshold, distribution, path):
     del trained_index
     gc.collect()
     
+    # build BTree index
     print("*************start BTree************")
     bt = BTree(2)
     print("Start Build")
@@ -220,6 +245,7 @@ def train_index(threshold, use_threshold, distribution, path):
     print("mean error = ", mean_error)
     print("*************end BTree************")
 
+    # write BTree into files
     result = []
     for ind, node in bt.nodes.items():
         item = {}
@@ -235,6 +261,7 @@ def train_index(threshold, use_threshold, distribution, path):
               "wb") as jsonFile:
         json.dump(result, jsonFile)
 
+    # write performance into files
     performance_BTree = {"type": "BTree", "build time": build_time, "search time": search_time,
                          "average error": mean_error,
                          "store size": os.path.getsize(
@@ -247,6 +274,7 @@ def train_index(threshold, use_threshold, distribution, path):
     gc.collect()
 
 
+# Main function for sampel training
 def sample_train(threshold, use_threshold, distribution, training_percent, path):
     data = pd.read_csv(path, header=None)
     train_set_x = []
@@ -255,6 +283,7 @@ def sample_train(threshold, use_threshold, distribution, training_percent, path)
     test_set_y = []
 
     set_data_type(distribution)
+    #read parameters
     if distribution == Distribution.RANDOM:
         parameter = ParameterPool.RANDOM.value
     elif distribution == Distribution.LOGNORMAL:
@@ -276,6 +305,7 @@ def sample_train(threshold, use_threshold, distribution, training_percent, path)
     global TOTAL_NUMBER
     TOTAL_NUMBER = data.shape[0]
     interval = int(1 / training_percent)
+    # pick data for training according to training percent
     if training_percent != 0.8:
         for i in range(TOTAL_NUMBER):
             test_set_x.append(data.ix[i, 0])
@@ -350,7 +380,7 @@ def sample_train(threshold, use_threshold, distribution, training_percent, path)
     del trained_index
     gc.collect()
 
-
+# help message
 def show_help_message(msg):
     help_message = {'command': 'python Learned_BTree.py -t <Type> -d <Distribution> [-p|-n] [Percent]|[Number] [-c] [New data] [-h]',
                     'type': 'Type: sample, full',
@@ -371,7 +401,7 @@ def show_help_message(msg):
         print(help_message['command'])
         print('Error! ' + help_message[msg])
 
-
+# command line
 def main(argv):
     distribution = None
     per = 0.5
