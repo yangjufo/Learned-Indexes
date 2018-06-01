@@ -50,8 +50,9 @@ Index Structures. https://arxiv.org/abs/1712.01208, 2017
 
 ## 数据索引
 ### 主要步骤
+
 1. 依据论文中思想，搭建混合多级神经网络架构
-![avatar](about/models.png)
+![Stage Models](https://github.com/yangjufo/Learned-Indexes/blob/master/about/models.PNG)
 ``` 
  Input: int threshold, int stages[]
  Data: record data[]
@@ -83,15 +84,11 @@ Index Structures. https://arxiv.org/abs/1712.01208, 2017
 ## 存储优化
 > 基于后续插入数据的分布与现有分布相近的观点。
 ### 主要步骤
-1. 根据建立的数据索引估计数据分布，并移动数据的位置，预留出空间。比如原先0-100的数据占据10个BLOCK，预计最终存储数据是现在的2倍，则预留100个BLOCK。
+1. 根据建立的数据索引估计数据分布，并移动数据的位置，预留出空间。比如原先0-100的数据占据100个BLOCK，预计最终存储数据是现在的2倍，则预留100个BLOCK。
 
 2. 插入数据，与不进行优化比较。
 
 ### 优势
 1. 新插入数据冲突少，加快插入速度。
 2. 无需重新调整索引，降低索引维护代价，支持了新数据插入场景。
-
-*** 
-## 后续
->更详细的说明和结果将会尽快添加
 
